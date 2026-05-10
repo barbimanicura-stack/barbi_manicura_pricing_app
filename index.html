@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Barbi Manicura — Sistema de Gestión</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+--bg:#FAF9F7;--bg2:#F2EFE9;--bg3:#FFFFFF;
+--text:#1A1814;--text2:#6B6760;--text3:#A8A49E;
+--accent:#C4855A;--accent2:#E8D5C4;--accent3:#8B4513;
+--border:#E5E0D8;--border2:#D4CEC4;
+--success:#4A7C59;--danger:#C0392B;--info:#2C5F8A;
+--radius:12px;--radius-sm:8px;--radius-lg:16px;
+--font-serif:'DM Serif Display',Georgia,serif;
+--font-sans:'DM Sans',system-ui,sans-serif;
+--shadow:0 1px 3px rgba(0,0,0,0.06);
+}
+body{font-family:var(--font-sans);background:var(--bg);color:var(--text);min-height:100vh;font-size:15px;line-height:1.6}
+.app{display:flex;min-height:100vh}
+
+/* SIDEBAR */
+.sidebar{width:240px;background:var(--bg3);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:100;transition:transform 0.3s}
+.sidebar-logo{padding:24px 20px 16px;border-bottom:1px solid var(--border)}
+.sidebar-logo .logo-name{font-family:var(--font-serif);font-size:22px;color:var(--text);letter-spacing:-0.3px}
+.sidebar-logo .logo-tag{font-size:11px;color:var(--text3);letter-spacing:0.5px;text-transform:uppercase;margin-top:2px}
+.sidebar-nav{flex:1;padding:12px 12px;overflow-y:auto}
+.nav-section{margin-bottom:8px}
+.nav-label{font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;padding:8px 8px 4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);font-size:13.5px;transition:all 0.15s;border:none;background:none;width:100%;text-align:left}
+.nav-item:hover{background:var(--bg2);color:var(--text)}
+.nav-item.active{background:var(--accent2);color:var(--accent3);font-weight:500}
+.nav-item svg{width:16px;height:16px;flex-shrink:0;stroke-width:1.8}
+.sidebar-footer{padding:16px 12px;border-top:1px solid var(--border)}
+.user-chip{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius-sm);background:var(--bg2)}
+.user-avatar{width:30px;height:30px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:500;flex-shrink:0}
+.user-info{min-width:0}
+.user-name{font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-role{font-size:11px;color:var(--text3)}
+
+/* MAIN */
+.main{margin-left:240px;flex:1;display:flex;flex-direction:column;min-width:0}
+.topbar{padding:16px 28px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg3);position:sticky;top:0;z-index:50}
+.page-title{font-family:var(--font-serif);font-size:21px;color:var(--text)}
+.topbar-actions{display:flex;gap:8px}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:500;cursor:pointer;transition:all 0.15s;border:1px solid transparent;font-family:var(--font-sans)}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-primary:hover{background:var(--accent3)}
+.btn-secondary{background:var(--bg3);color:var(--text);border-color:var(--border2)}
+.btn-secondary:hover{background:var(--bg2)}
+.btn-ghost{background:none;color:var(--text2);border-color:transparent}
+.btn-ghost:hover{background:var(--bg2);color:var(--text)}
+.btn-danger{background:none;color:var(--danger);border-color:var(--danger)}
+.btn-danger:hover{background:#fef2f2}
+.btn-sm{padding:5px 10px;font-size:12.5px}
+.btn svg{width:14px;height:14px;stroke-width:2}
+
+/* CONTENT */
+.content{padding:24px 28px;flex:1}
+
+/* CARDS */
+.card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px}
+.card-sm{padding:14px}
+
+/* STAT CARDS */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px}
+.stat-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.stat-label{font-size:11.5px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px}
+.stat-value{font-size:24px;font-weight:300;color:var(--text);font-family:var(--font-serif)}
+.stat-sub{font-size:12px;color:var(--text3);margin-top:2px}
+.stat-up{color:var(--success)}
+.stat-down{color:var(--danger)}
+
+/* TABLES */
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+thead th{font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)}
+tbody tr{border-bottom:1px solid var(--border);transition:background 0.1s}
+tbody tr:hover{background:var(--bg2)}
+tbody tr:last-child{border-bottom:none}
+td{padding:11px 12px;color:var(--text);vertical-align:middle}
+.td-muted{color:var(--text2)}
+.td-num{font-variant-numeric:tabular-nums;font-size:13px}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:11.5px;font-weight:500}
+.badge-accent{background:var(--accent2);color:var(--accent3)}
+.badge-success{background:#e8f5ec;color:var(--success)}
+.badge-info{background:#e5f0f8;color:var(--info)}
+.badge-neutral{background:var(--bg2);color:var(--text2)}
+.badge-danger{background:#fee;color:var(--danger)}
+
+/* FORMS */
+.form-group{margin-bottom:16px}
+.form-label{display:block;font-size:12.5px;font-weight:500;color:var(--text2);margin-bottom:6px}
+.form-input{width:100%;padding:9px 12px;border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:14px;font-family:var(--font-sans);background:var(--bg3);color:var(--text);transition:border 0.15s;outline:none}
+.form-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(196,133,90,0.1)}
+.form-select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B6760' stroke-width='2'%3E%3Cpolyline points='6,9 12,15 18,9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:30px}
+.form-hint{font-size:12px;color:var(--text3);margin-top:4px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.calc-display{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:13.5px;color:var(--text2)}
+.calc-display strong{color:var(--accent3);font-size:15px}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px}
+.modal{background:var(--bg3);border-radius:var(--radius-lg);width:100%;max-width:560px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.15)}
+.modal-header{padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-title{font-family:var(--font-serif);font-size:18px}
+.modal-body{padding:20px 24px}
+.modal-footer{padding:16px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+.modal-close{background:none;border:none;cursor:pointer;color:var(--text3);padding:4px;border-radius:4px}
+.modal-close:hover{color:var(--text);background:var(--bg2)}
+
+/* SEARCH */
+.search-bar{position:relative;margin-bottom:16px}
+.search-bar input{padding-left:34px}
+.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3)}
+.search-icon svg{width:15px;height:15px;stroke-width:2}
+
+/* INGREDIENT ROWS */
+.ingredient-row{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg2);border-radius:var(--radius-sm);margin-bottom:6px}
+.ingredient-row .flex1{flex:1}
+.ingredient-row .cost-display{font-size:12px;color:var(--text3);white-space:nowrap;min-width:80px;text-align:right}
+
+/* COST BREAKDOWN */
+.cost-breakdown{background:linear-gradient(135deg,#FDF6F0,#FAF2EA);border:1px solid var(--accent2);border-radius:var(--radius);padding:16px;margin-top:16px}
+.cost-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:13.5px}
+.cost-row.total{border-top:1px solid var(--accent2);margin-top:8px;padding-top:12px;font-weight:500}
+.cost-row.total .cost-val{font-family:var(--font-serif);font-size:18px;color:var(--accent3)}
+.cost-label{color:var(--text2)}
+
+/* PAYMENT FORM */
+.payment-method{display:flex;gap:8px;margin-bottom:16px}
+.method-btn{flex:1;padding:10px;border:2px solid var(--border2);border-radius:var(--radius-sm);cursor:pointer;text-align:center;font-size:13px;font-family:var(--font-sans);background:var(--bg3);color:var(--text2);transition:all 0.15s}
+.method-btn.active{border-color:var(--accent);background:var(--accent2);color:var(--accent3);font-weight:500}
+.method-btn svg{display:block;margin:0 auto 4px;width:18px;height:18px}
+
+/* EMPTY STATE */
+.empty{text-align:center;padding:48px 24px}
+.empty-icon{width:48px;height:48px;border-radius:50%;background:var(--bg2);display:flex;align-items:center;justify-content:center;margin:0 auto 12px}
+.empty-icon svg{width:22px;height:22px;stroke:var(--text3);stroke-width:1.5}
+.empty h3{font-size:15px;color:var(--text);margin-bottom:4px}
+.empty p{font-size:13.5px;color:var(--text3)}
+
+/* TABS */
+.tabs{display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:0}
+.tab{padding:8px 14px;font-size:13.5px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;color:var(--text2);transition:all 0.15s;background:none;border-top:none;border-left:none;border-right:none;font-family:var(--font-sans)}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent3);border-bottom-color:var(--accent)}
+
+/* SPLIT INPUT */
+.split-inputs{display:flex;gap:10px;align-items:flex-end}
+.split-inputs .form-group{flex:1;margin-bottom:0}
+
+/* SECTION HEADER */
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.section-title{font-size:15px;font-weight:500;color:var(--text)}
+
+/* TOAST */
+.toast-container{position:fixed;bottom:24px;right:24px;z-index:999;display:flex;flex-direction:column;gap:8px}
+.toast{background:var(--text);color:#fff;padding:10px 16px;border-radius:var(--radius-sm);font-size:13.5px;animation:slideIn 0.2s ease;display:flex;align-items:center;gap:8px}
+.toast.success{background:var(--success)}
+.toast.error{background:var(--danger)}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:none;opacity:1}}
+
+/* CAJA */
+.pago-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;font-size:12px}
+.pago-efectivo{background:#e8f5ec;color:var(--success)}
+.pago-transferencia{background:#e5f0f8;color:var(--info)}
+.pago-mixto{background:var(--accent2);color:var(--accent3)}
+
+/* DASHBOARD RING */
+.ring-wrap{display:flex;align-items:center;gap:20px}
+.ring-legend{flex:1}
+.ring-legend-item{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px}
+.ring-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+.sidebar{transform:translateX(-240px)}.sidebar.open{transform:none}
+.main{margin-left:0}
+.form-row,.form-row-3{grid-template-columns:1fr}
+.stats-grid{grid-template-columns:1fr 1fr}
+}
+
+/* UTILS */
+.hidden{display:none!important}
+.flex{display:flex}.items-center{align-items:center}.justify-between{justify-content:space-between}.gap-2{gap:8px}.gap-3{gap:12px}.mt-1{margin-top:4px}.mt-2{margin-top:8px}.mt-3{margin-top:12px}.mt-4{margin-top:16px}
+.text-sm{font-size:13px}.text-xs{font-size:11.5px}.text-muted{color:var(--text2)}.text-accent{color:var(--accent3)}.font-medium{font-weight:500}
+.w-full{width:100%}.ml-auto{margin-left:auto}
+.p-0{padding:0}
+.divider{height:1px;background:var(--border);margin:16px 0}
+.chip-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.chip{padding:4px 10px;border-radius:20px;font-size:12px;border:1px solid var(--border2);cursor:pointer;color:var(--text2);background:var(--bg3);transition:all 0.15s}
+.chip.active{background:var(--accent2);border-color:var(--accent);color:var(--accent3)}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-name">Barbi</div>
+      <div class="logo-tag">Sistema de Gestión · Manicura</div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section">
+        <div class="nav-label">Principal</div>
+        <button class="nav-item active" data-page="dashboard" onclick="navigate('dashboard')">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          Dashboard
+        </button>
+        <button class="nav-item" data-page="caja" onclick="navigate('caja')">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+          Caja
+        </button>
+        <button class="nav-item" data-page="arqueo" onclick="navigate('arqueo')">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M9 14l6-6"/><circle cx="9.5" cy="9.5" r="1.5"/><circle cx="14.5" cy="14.5" r="1.5"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg>
+          Arqueo de caja
+        </button>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">Negocio</div>
+        <button class="nav-item" data-page="servicios" onclick="navigate('servicios')">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+          Servicios
+        </button>
+        <button class="nav-item" data-page="insumos" onclick="navigate('insumos')">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          Insumos
+        </button>
+        <button class="nav-item" data-page="estadisticas" onclick="navigate('estadisticas')">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Estadísticas
+        </button>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">Sistema</div>
+        <button class="nav-item" data-page="config" onclick="navigate('config')">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+          Configuración
+        </button>
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="user-chip">
+        <div class="user-avatar" id="userAvatar">B</div>
+        <div class="user-info">
+          <div class="user-name" id="userName">Barbi</div>
+          <div class="user-role" id="userRole">Administradora</div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <div class="main">
+    <div class="topbar">
+      <div class="page-title" id="pageTitle">Dashboard</div>
+      <div class="topbar-actions" id="topbarActions"></div>
+    </div>
+    <div class="content" id="mainContent"></div>
+  </div>
+</div>
+
+<!-- MODAL CONTAINER -->
+<div id="modalContainer"></div>
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ═══════════════════════════════════════════════
+// DATA STORE (localStorage para persistencia)
+// ═══════════════════════════════════════════════
+const DB = {
+  get(key){ try{return JSON.parse(localStorage.getItem('barbi_'+key))||[]}catch{return[]} },
+  set(key,val){ localStorage.setItem('barbi_'+key,JSON.stringify(val)) },
+  getObj(key){ try{return JSON.parse(localStorage.getItem('barbi_'+key))||{}}catch{return{}} },
+  setObj(key,val){ localStorage.setItem('barbi_'+key,JSON.stringify(val)) }
+};
+
+// State
+let insumos = DB.get('insumos');
+let servicios = DB.get('servicios');
+let pagos = DB.get('pagos');
+let config = DB.getObj('config');
+
+// Defaults config
+if(!config.sueldoMensual) config = {
+  sueldoMensual:300000, turnosMensuales:80,
+  margenGanancia:40, gastosOperativos:0,
+  impuestos:0, comision:0,
+  ...config
+};
+
+function save(){
+  DB.set('insumos',insumos);
+  DB.set('servicios',servicios);
+  DB.set('pagos',pagos);
+  DB.setObj('config',config);
+}
+
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6) }
+
+function fmt(n){ return (Math.round(n)||0).toLocaleString('es-AR') }
+function fmtP(n){ return (Math.round(n*10)/10).toFixed(1) }
+
+// ═══════════════════════════════════════════════
+// CALCULATIONS
+// ═══════════════════════════════════════════════
+function costoPorTurno(){
+  if(!config.turnosMensuales) return 0;
+  return config.sueldoMensual / config.turnosMensuales;
+}
+
+function calcularServicio(servicio){
+  let costoMateriales = 0;
+  (servicio.ingredientes||[]).forEach(ing=>{
+    const ins = insumos.find(i=>i.id===ing.insumoId);
+    if(ins && ins.cantidad>0){
+      const costoPorUnidad = ins.costo / ins.cantidad;
+      costoMateriales += costoPorUnidad * ing.cantidad;
+    }
+  });
+  const costoManoObra = costoPorTurno();
+  const subtotal = costoMateriales + costoManoObra;
+  const gastosOp = subtotal * (config.gastosOperativos/100);
+  const impuestos = (subtotal+gastosOp) * (config.impuestos/100);
+  const costoReal = subtotal + gastosOp + impuestos;
+  const margen = costoReal * (config.margenGanancia/100);
+  const comision = (costoReal+margen) * (config.comision/100);
+  const precioSugerido = costoReal + margen + comision;
+  return { costoMateriales, costoManoObra, gastosOp, impuestos, costoReal, margen, comision, precioSugerido };
+}
+
+// ═══════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════
+let currentPage = 'dashboard';
+
+function navigate(page){
+  currentPage = page;
+  document.querySelectorAll('.nav-item').forEach(el=>{
+    el.classList.toggle('active', el.dataset.page===page);
+  });
+  const titles = {
+    dashboard:'Dashboard',insumos:'Insumos',servicios:'Servicios',
+    caja:'Caja',arqueo:'Arqueo de Caja',estadisticas:'Estadísticas',config:'Configuración'
+  };
+  document.getElementById('pageTitle').textContent = titles[page]||page;
+  const renders = {dashboard:renderDashboard,insumos:renderInsumos,servicios:renderServicios,
+    caja:renderCaja,arqueo:renderArqueo,estadisticas:renderEstadisticas,config:renderConfig};
+  if(renders[page]) renders[page]();
+}
+
+// ═══════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════
+function toast(msg,type='success'){
+  const tc=document.getElementById('toastContainer');
+  const t=document.createElement('div');
+  t.className='toast '+(type==='error'?'error':'success');
+  t.innerHTML=`<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg>${msg}`;
+  tc.appendChild(t);
+  setTimeout(()=>t.remove(),3000);
+}
+
+// ═══════════════════════════════════════════════
+// MODAL
+// ═══════════════════════════════════════════════
+function openModal(html){
+  const mc=document.getElementById('modalContainer');
+  mc.innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">${html}</div></div>`;
+}
+function closeModal(){ document.getElementById('modalContainer').innerHTML=''; }
+
+// ═══════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════
+function renderDashboard(){
+  document.getElementById('topbarActions').innerHTML='';
+  const hoy = new Date().toDateString();
+  const pagosHoy = pagos.filter(p=>new Date(p.fecha).toDateString()===hoy);
+  const totalHoy = pagosHoy.reduce((a,p)=>a+p.total,0);
+  const efectivoHoy = pagosHoy.reduce((a,p)=>a+(p.efectivo||0),0);
+  const transHoy = pagosHoy.reduce((a,p)=>a+(p.transferencia||0),0);
+
+  const mes = new Date().getMonth();
+  const anio = new Date().getFullYear();
+  const pagosMes = pagos.filter(p=>{const d=new Date(p.fecha);return d.getMonth()===mes&&d.getFullYear()===anio});
+  const totalMes = pagosMes.reduce((a,p)=>a+p.total,0);
+  const serviciosMes = pagosMes.length;
+
+  // Servicios más usados
+  const servicioCount = {};
+  pagosMes.forEach(p=>{
+    if(p.servicioNombre) servicioCount[p.servicioNombre]=(servicioCount[p.servicioNombre]||0)+1;
+  });
+  const top3 = Object.entries(servicioCount).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
+  const ultimos5 = [...pagos].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).slice(0,5);
+
+  document.getElementById('mainContent').innerHTML=`
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">Ingresos de hoy</div>
+      <div class="stat-value">$${fmt(totalHoy)}</div>
+      <div class="stat-sub">${pagosHoy.length} servicio${pagosHoy.length!==1?'s':''}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Ingresos del mes</div>
+      <div class="stat-value">$${fmt(totalMes)}</div>
+      <div class="stat-sub">${serviciosMes} servicios</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Efectivo hoy</div>
+      <div class="stat-value">$${fmt(efectivoHoy)}</div>
+      <div class="stat-sub">en mano</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Transferencias hoy</div>
+      <div class="stat-value">$${fmt(transHoy)}</div>
+      <div class="stat-sub">en cuenta</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="card">
+      <div class="section-header">
+        <div class="section-title">Últimos movimientos</div>
+        <button class="btn btn-ghost btn-sm" onclick="navigate('caja')">Ver todos</button>
+      </div>
+      ${ultimos5.length===0?`<div class="empty"><p>Sin movimientos aún</p></div>`:`
+      <div class="table-wrap"><table>
+        <thead><tr><th>Servicio</th><th>Forma</th><th>Total</th></tr></thead>
+        <tbody>
+        ${ultimos5.map(p=>`<tr>
+          <td><div>${p.servicioNombre||'Servicio manual'}</div><div class="text-xs text-muted">${new Date(p.fecha).toLocaleDateString('es-AR')}</div></td>
+          <td><span class="pago-chip pago-${p.forma}">${p.forma}</span></td>
+          <td class="td-num font-medium">$${fmt(p.total)}</td>
+        </tr>`).join('')}
+        </tbody>
+      </table></div>`}
+    </div>
+    <div class="card">
+      <div class="section-title" style="margin-bottom:16px">Top servicios del mes</div>
+      ${top3.length===0?`<div class="empty"><p>Sin datos aún</p></div>`:
+        top3.map(([nom,cnt],i)=>`
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+          <div style="width:24px;height:24px;border-radius:50%;background:var(--accent2);color:var(--accent3);font-size:11px;font-weight:500;display:flex;align-items:center;justify-content:center">${i+1}</div>
+          <div style="flex:1;font-size:13.5px">${nom}</div>
+          <div class="badge badge-accent">${cnt}x</div>
+        </div>`).join('')
+      }
+      <div class="divider"></div>
+      <div class="section-header" style="margin-bottom:0">
+        <div class="text-sm text-muted">Insumos cargados</div>
+        <div class="font-medium">${insumos.length}</div>
+      </div>
+      <div class="section-header" style="margin-bottom:0;margin-top:8px">
+        <div class="text-sm text-muted">Servicios definidos</div>
+        <div class="font-medium">${servicios.length}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mt-4">
+    <div class="section-header" style="margin-bottom:4px">
+      <div class="section-title">Accesos rápidos</div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">
+      <button class="btn btn-primary" onclick="navigate('caja');setTimeout(openNuevoPago,100)">
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Registrar pago
+      </button>
+      <button class="btn btn-secondary" onclick="navigate('insumos');setTimeout(openNuevoInsumo,100)">
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nuevo insumo
+      </button>
+      <button class="btn btn-secondary" onclick="navigate('servicios');setTimeout(openNuevoServicio,100)">
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nuevo servicio
+      </button>
+      <button class="btn btn-secondary" onclick="navigate('arqueo')">Ver arqueo</button>
+    </div>
+  </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════
+// INSUMOS
+// ═══════════════════════════════════════════════
+let insumoSearch='';
+function renderInsumos(){
+  document.getElementById('topbarActions').innerHTML=`
+    <button class="btn btn-primary" onclick="openNuevoInsumo()">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Nuevo insumo
+    </button>`;
+  const filtered = insumos.filter(i=>!insumoSearch||i.nombre.toLowerCase().includes(insumoSearch.toLowerCase())||i.categoria.toLowerCase().includes(insumoSearch.toLowerCase()));
+  document.getElementById('mainContent').innerHTML=`
+  <div class="card">
+    <div class="search-bar">
+      <div class="search-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+      <input class="form-input" placeholder="Buscar insumos..." value="${insumoSearch}" oninput="insumoSearch=this.value;renderInsumos()" style="padding-left:34px">
+    </div>
+    ${filtered.length===0?`<div class="empty">
+      <div class="empty-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div>
+      <h3>${insumoSearch?'Sin resultados':'Sin insumos cargados'}</h3>
+      <p>${insumoSearch?'Probá con otro término':'Agregá tu primer insumo para empezar'}</p>
+    </div>`:`
+    <div class="table-wrap"><table>
+      <thead><tr><th>Nombre</th><th>Categoría</th><th>Costo total</th><th>Cantidad</th><th>Costo/unidad</th><th>Marca</th><th></th></tr></thead>
+      <tbody>
+      ${filtered.map(ins=>{
+        const cpu = ins.cantidad>0 ? ins.costo/ins.cantidad : 0;
+        return `<tr>
+          <td><div class="font-medium">${ins.nombre}</div>${ins.notas?`<div class="text-xs text-muted">${ins.notas}</div>`:''}</td>
+          <td><span class="badge badge-neutral">${ins.categoria}</span></td>
+          <td class="td-num">$${fmt(ins.costo)}</td>
+          <td class="td-muted">${ins.cantidad} ${ins.unidad}</td>
+          <td class="td-num text-accent font-medium">$${fmtP(cpu)}/${ins.unidad}</td>
+          <td class="td-muted text-sm">${ins.marca||'—'}</td>
+          <td>
+            <div style="display:flex;gap:4px">
+              <button class="btn btn-ghost btn-sm" onclick="editInsumo('${ins.id}')">
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="deleteInsumo('${ins.id}')">
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+              </button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table></div>`}
+  </div>`;
+}
+
+function openNuevoInsumo(id){
+  const ins = id ? insumos.find(i=>i.id===id) : null;
+  openModal(`
+  <div class="modal-header">
+    <div class="modal-title">${ins?'Editar insumo':'Nuevo insumo'}</div>
+    <button class="modal-close" onclick="closeModal()"><svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+  </div>
+  <div class="modal-body">
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Nombre *</label>
+        <input class="form-input" id="ins-nombre" value="${ins?.nombre||''}" placeholder="Ej: Gel UV transparente">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Categoría *</label>
+        <input class="form-input" id="ins-cat" value="${ins?.categoria||''}" placeholder="Ej: Geles, Primers, Tips">
+      </div>
+    </div>
+    <div class="form-row-3">
+      <div class="form-group">
+        <label class="form-label">Costo de compra ($) *</label>
+        <input class="form-input" type="number" id="ins-costo" value="${ins?.costo||''}" placeholder="15000" oninput="calcCPU()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Cantidad total *</label>
+        <input class="form-input" type="number" id="ins-cant" value="${ins?.cantidad||''}" placeholder="30" oninput="calcCPU()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Unidad *</label>
+        <select class="form-input form-select" id="ins-unidad">
+          ${['ml','g','unidades','cm','rollos','sobres','frascos','pares'].map(u=>`<option ${(ins?.unidad||'ml')===u?'selected':''}>${u}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div id="cpu-display" class="calc-display mt-2 mb-3" style="display:${ins?'block':'none'}">
+      Costo por unidad: <strong id="cpu-val">$${ins?fmtP(ins.costo/ins.cantidad):0}</strong>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Marca (opcional)</label>
+        <input class="form-input" id="ins-marca" value="${ins?.marca||''}" placeholder="Ej: ByFama">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notas (opcional)</label>
+        <input class="form-input" id="ins-notas" value="${ins?.notas||''}" placeholder="Observaciones">
+      </div>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+    <button class="btn btn-primary" onclick="saveInsumo('${id||''}')">Guardar insumo</button>
+  </div>`);
+  if(ins) calcCPU();
+}
+
+function calcCPU(){
+  const c=parseFloat(document.getElementById('ins-costo')?.value)||0;
+  const q=parseFloat(document.getElementById('ins-cant')?.value)||0;
+  const d=document.getElementById('cpu-display');
+  if(d&&c&&q){ d.style.display='block'; document.getElementById('cpu-val').textContent='$'+fmtP(c/q); }
+}
+
+function saveInsumo(id){
+  const nombre=document.getElementById('ins-nombre').value.trim();
+  const categoria=document.getElementById('ins-cat').value.trim();
+  const costo=parseFloat(document.getElementById('ins-costo').value);
+  const cantidad=parseFloat(document.getElementById('ins-cant').value);
+  if(!nombre||!categoria||!costo||!cantidad){ toast('Completá los campos obligatorios','error'); return; }
+  const obj={id:id||uid(),nombre,categoria,costo,cantidad,
+    unidad:document.getElementById('ins-unidad').value,
+    marca:document.getElementById('ins-marca').value.trim(),
+    notas:document.getElementById('ins-notas').value.trim()};
+  if(id){ const idx=insumos.findIndex(i=>i.id===id); insumos[idx]=obj; }
+  else insumos.push(obj);
+  save(); closeModal(); renderInsumos(); toast(id?'Insumo actualizado':'Insumo creado');
+}
+
+function editInsumo(id){ openNuevoInsumo(id); }
+function deleteInsumo(id){
+  if(!confirm('¿Eliminar este insumo?')) return;
+  insumos=insumos.filter(i=>i.id!==id); save(); renderInsumos(); toast('Insumo eliminado');
+}
+
+// ═══════════════════════════════════════════════
+// SERVICIOS
+// ═══════════════════════════════════════════════
+function renderServicios(){
+  document.getElementById('topbarActions').innerHTML=`
+    <button class="btn btn-primary" onclick="openNuevoServicio()">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Nuevo servicio
+    </button>`;
+  document.getElementById('mainContent').innerHTML=`
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">
+    ${servicios.length===0?`<div class="card" style="grid-column:1/-1"><div class="empty">
+      <div class="empty-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div>
+      <h3>Sin servicios definidos</h3><p>Creá tu primer servicio con su receta de insumos</p>
+    </div></div>`:''}
+    ${servicios.map(s=>{
+      const calc=calcularServicio(s);
+      return `<div class="card">
+        <div class="flex items-center justify-between mb-2">
+          <div class="font-medium" style="font-size:15px">${s.nombre}</div>
+          <div class="flex gap-2">
+            <button class="btn btn-ghost btn-sm" onclick="editServicio('${s.id}')">
+              <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+            <button class="btn btn-danger btn-sm" onclick="deleteServicio('${s.id}')">
+              <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+            </button>
+          </div>
+        </div>
+        ${s.descripcion?`<p class="text-sm text-muted mb-2">${s.descripcion}</p>`:''}
+        <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+          ${s.tiempo?`<span class="badge badge-neutral">⏱ ${s.tiempo} min</span>`:''}
+          ${s.dificultad?`<span class="badge badge-info">${s.dificultad}</span>`:''}
+          <span class="badge badge-neutral">${(s.ingredientes||[]).length} insumos</span>
+        </div>
+        <div class="divider" style="margin:8px 0"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div><div class="stat-label" style="font-size:10px">Costo real</div><div style="font-size:14px;font-weight:500;color:var(--text)">$${fmt(calc.costoReal)}</div></div>
+          <div><div class="stat-label" style="font-size:10px">Precio sugerido</div><div style="font-size:16px;font-weight:500;color:var(--accent3);font-family:var(--font-serif)">$${fmt(calc.precioSugerido)}</div></div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+let tempIngredientes=[];
+
+function openNuevoServicio(id){
+  const s = id ? servicios.find(sv=>sv.id===id) : null;
+  tempIngredientes = s ? JSON.parse(JSON.stringify(s.ingredientes||[])) : [];
+  openModal(`
+  <div class="modal-header">
+    <div class="modal-title">${s?'Editar servicio':'Nuevo servicio'}</div>
+    <button class="modal-close" onclick="closeModal()"><svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+  </div>
+  <div class="modal-body">
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Nombre del servicio *</label>
+        <input class="form-input" id="svc-nombre" value="${s?.nombre||''}" placeholder="Ej: Soft Gel completo">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Descripción</label>
+        <input class="form-input" id="svc-desc" value="${s?.descripcion||''}" placeholder="Descripción opcional">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Tiempo estimado (min)</label>
+        <input class="form-input" type="number" id="svc-tiempo" value="${s?.tiempo||''}" placeholder="90">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Dificultad</label>
+        <select class="form-input form-select" id="svc-dif">
+          <option value="">— Opcional —</option>
+          ${['Básico','Intermedio','Avanzado','Premium'].map(d=>`<option ${s?.dificultad===d?'selected':''}>${d}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="section-header">
+      <div class="section-title">Insumos / Receta</div>
+      <button class="btn btn-secondary btn-sm" onclick="addIngredienteRow()">+ Agregar insumo</button>
+    </div>
+    ${insumos.length===0?`<p class="text-sm text-muted">Primero cargá insumos desde la sección Insumos.</p>`:''}
+    <div id="ingredientes-list"></div>
+
+    <div id="svc-calc-preview" class="cost-breakdown" style="display:none"></div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+    <button class="btn btn-primary" onclick="saveServicio('${id||''}')">Guardar servicio</button>
+  </div>`);
+  renderIngredientesList();
+}
+
+function renderIngredientesList(){
+  const el=document.getElementById('ingredientes-list');
+  if(!el) return;
+  if(tempIngredientes.length===0){ el.innerHTML='<p class="text-sm text-muted mb-2">Sin insumos agregados aún</p>'; updateSvcPreview(); return; }
+  el.innerHTML=tempIngredientes.map((ing,i)=>{
+    const ins=insumos.find(x=>x.id===ing.insumoId);
+    const cpu=ins&&ins.cantidad>0?ins.costo/ins.cantidad:0;
+    const costo=cpu*ing.cantidad;
+    return `<div class="ingredient-row">
+      <select class="form-input flex1" style="font-size:13px" onchange="tempIngredientes[${i}].insumoId=this.value;renderIngredientesList()">
+        <option value="">Seleccionar insumo…</option>
+        ${insumos.map(x=>`<option value="${x.id}" ${x.id===ing.insumoId?'selected':''}>${x.nombre} (${x.unidad})</option>`).join('')}
+      </select>
+      <input type="number" class="form-input" style="width:80px;font-size:13px" value="${ing.cantidad}" placeholder="Cant." oninput="tempIngredientes[${i}].cantidad=parseFloat(this.value)||0;renderIngredientesList()">
+      <div class="cost-display">$${fmtP(costo)}</div>
+      <button class="btn btn-ghost btn-sm" onclick="tempIngredientes.splice(${i},1);renderIngredientesList()">
+        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>`;
+  }).join('');
+  updateSvcPreview();
+}
+
+function addIngredienteRow(){
+  tempIngredientes.push({insumoId:'',cantidad:0});
+  renderIngredientesList();
+}
+
+function updateSvcPreview(){
+  const el=document.getElementById('svc-calc-preview');
+  if(!el) return;
+  const tmpS={ingredientes:tempIngredientes};
+  const c=calcularServicio(tmpS);
+  if(c.costoReal<=0){ el.style.display='none'; return; }
+  el.style.display='block';
+  el.innerHTML=`
+    <div style="font-size:12px;font-weight:500;color:var(--accent3);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">Cálculo en tiempo real</div>
+    <div class="cost-row"><span class="cost-label">Materiales</span><span>$${fmt(c.costoMateriales)}</span></div>
+    <div class="cost-row"><span class="cost-label">Mano de obra</span><span>$${fmt(c.costoManoObra)}</span></div>
+    ${c.gastosOp>0?`<div class="cost-row"><span class="cost-label">Gastos operativos (${config.gastosOperativos}%)</span><span>$${fmt(c.gastosOp)}</span></div>`:''}
+    ${c.impuestos>0?`<div class="cost-row"><span class="cost-label">Impuestos (${config.impuestos}%)</span><span>$${fmt(c.impuestos)}</span></div>`:''}
+    <div class="cost-row"><span class="cost-label">Costo real</span><span>$${fmt(c.costoReal)}</span></div>
+    ${c.comision>0?`<div class="cost-row"><span class="cost-label">Comisión (${config.comision}%)</span><span>$${fmt(c.comision)}</span></div>`:''}
+    <div class="cost-row total"><span class="cost-label">Precio sugerido (${config.margenGanancia}% margen)</span><span class="cost-val">$${fmt(c.precioSugerido)}</span></div>`;
+}
+
+function saveServicio(id){
+  const nombre=document.getElementById('svc-nombre').value.trim();
+  if(!nombre){ toast('Ingresá el nombre del servicio','error'); return; }
+  const obj={id:id||uid(),nombre,
+    descripcion:document.getElementById('svc-desc').value.trim(),
+    tiempo:parseInt(document.getElementById('svc-tiempo').value)||0,
+    dificultad:document.getElementById('svc-dif').value,
+    ingredientes:tempIngredientes.filter(i=>i.insumoId&&i.cantidad>0)};
+  if(id){ const idx=servicios.findIndex(s=>s.id===id); servicios[idx]=obj; }
+  else servicios.push(obj);
+  save(); closeModal(); renderServicios(); toast(id?'Servicio actualizado':'Servicio creado');
+}
+
+function editServicio(id){ openNuevoServicio(id); }
+function deleteServicio(id){
+  if(!confirm('¿Eliminar este servicio?')) return;
+  servicios=servicios.filter(s=>s.id!==id); save(); renderServicios(); toast('Servicio eliminado');
+}
+
+// ═══════════════════════════════════════════════
+// CAJA — PAGOS
+// ═══════════════════════════════════════════════
+let cajaDate = new Date().toISOString().split('T')[0];
+let cajaBusqueda='';
+
+function renderCaja(){
+  document.getElementById('topbarActions').innerHTML=`
+    <button class="btn btn-primary" onclick="openNuevoPago()">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Registrar pago
+    </button>`;
+  const filtrados = pagos.filter(p=>{
+    const matchFecha=!cajaDate||p.fecha.startsWith(cajaDate.slice(0,7));
+    const matchBusq=!cajaBusqueda||(p.servicioNombre||'').toLowerCase().includes(cajaBusqueda.toLowerCase())||(p.clienteNombre||'').toLowerCase().includes(cajaBusqueda.toLowerCase());
+    return matchFecha&&matchBusq;
+  }).sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+
+  const totalEf=filtrados.reduce((a,p)=>a+(p.efectivo||0),0);
+  const totalTr=filtrados.reduce((a,p)=>a+(p.transferencia||0),0);
+  const totalGen=filtrados.reduce((a,p)=>a+p.total,0);
+
+  document.getElementById('mainContent').innerHTML=`
+  <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
+    <div class="stat-card"><div class="stat-label">Total período</div><div class="stat-value">$${fmt(totalGen)}</div><div class="stat-sub">${filtrados.length} pagos</div></div>
+    <div class="stat-card"><div class="stat-label">Efectivo</div><div class="stat-value">$${fmt(totalEf)}</div></div>
+    <div class="stat-card"><div class="stat-label">Transferencias</div><div class="stat-value">$${fmt(totalTr)}</div></div>
+  </div>
+  <div class="card">
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <div class="search-bar" style="flex:1;min-width:200px;margin-bottom:0">
+        <div class="search-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+        <input class="form-input" placeholder="Buscar…" value="${cajaBusqueda}" oninput="cajaBusqueda=this.value;renderCaja()" style="padding-left:34px">
+      </div>
+      <div class="form-group" style="margin:0">
+        <input type="month" class="form-input" value="${cajaDate.slice(0,7)}" onchange="cajaDate=this.value+'-01';renderCaja()">
+      </div>
+    </div>
+    ${filtrados.length===0?`<div class="empty"><h3>Sin movimientos</h3><p>Registrá un pago para comenzar</p></div>`:`
+    <div class="table-wrap"><table>
+      <thead><tr><th>Fecha</th><th>Servicio</th><th>Cliente</th><th>Forma de pago</th><th>Efectivo</th><th>Transfer.</th><th>Total</th><th></th></tr></thead>
+      <tbody>
+      ${filtrados.map(p=>`<tr>
+        <td class="td-muted text-sm">${new Date(p.fecha).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}</td>
+        <td class="font-medium">${p.servicioNombre||'Manual'}</td>
+        <td class="td-muted">${p.clienteNombre||'—'}</td>
+        <td><span class="pago-chip pago-${p.forma}">${p.forma==='mixto'?'Mixto':p.forma==='efectivo'?'Efectivo':'Transfer.'}</span></td>
+        <td class="td-num">${p.efectivo?'$'+fmt(p.efectivo):'—'}</td>
+        <td class="td-num">${p.transferencia?'$'+fmt(p.transferencia):'—'}</td>
+        <td class="td-num font-medium">$${fmt(p.total)}</td>
+        <td><button class="btn btn-danger btn-sm" onclick="deletePago('${p.id}')">
+          <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+        </button></td>
+      </tr>`).join('')}
+      </tbody>
+    </table></div>`}
+  </div>`;
+}
+
+let pagoForma='efectivo';
+let pagoServicioId='';
+
+function openNuevoPago(){
+  pagoForma='efectivo'; pagoServicioId='';
+  openModal(`
+  <div class="modal-header">
+    <div class="modal-title">Registrar pago</div>
+    <button class="modal-close" onclick="closeModal()"><svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+  </div>
+  <div class="modal-body">
+    <div class="form-group">
+      <label class="form-label">Servicio</label>
+      <select class="form-input form-select" id="pago-svc" onchange="onPagoSvcChange(this.value)">
+        <option value="">— Seleccionar servicio —</option>
+        ${servicios.map(s=>`<option value="${s.id}">${s.nombre}</option>`).join('')}
+        <option value="__manual">Otro (precio manual)</option>
+      </select>
+    </div>
+    <div id="precio-sugerido-row" style="display:none" class="calc-display mb-3">
+      Precio sugerido: <strong id="ps-val">$0</strong>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Cliente (opcional)</label>
+        <input class="form-input" id="pago-cliente" placeholder="Nombre del cliente">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Fecha</label>
+        <input type="datetime-local" class="form-input" id="pago-fecha" value="${new Date().toISOString().slice(0,16)}">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Forma de pago</label>
+      <div class="payment-method">
+        <button type="button" class="method-btn active" id="mb-efectivo" onclick="setPagoForma('efectivo')">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/></svg>
+          Efectivo
+        </button>
+        <button type="button" class="method-btn" id="mb-transferencia" onclick="setPagoForma('transferencia')">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Transferencia
+        </button>
+        <button type="button" class="method-btn" id="mb-mixto" onclick="setPagoForma('mixto')">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path d="M16 3h5v5M4 20 20.2 3.8M21 16v5h-5M15 15l5.1 5.1"/></svg>
+          Combinado
+        </button>
+      </div>
+    </div>
+
+    <div id="pago-campos"></div>
+    <div id="pago-total-row" class="cost-breakdown" style="display:none">
+      <div class="cost-row total"><span>Total a cobrar</span><span class="cost-val" id="pago-total-val">$0</span></div>
+    </div>
+    ${pagos.length>0&&!pagos.some(p=>p.fecha.startsWith(new Date().toISOString().slice(0,10)))?'':''}
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+    <button class="btn btn-primary" onclick="savePago()">Confirmar pago</button>
+  </div>`);
+  renderPagoCampos();
+}
+
+function onPagoSvcChange(val){
+  pagoServicioId=val;
+  const row=document.getElementById('precio-sugerido-row');
+  const ps=document.getElementById('ps-val');
+  if(val&&val!=='__manual'){
+    const s=servicios.find(x=>x.id===val);
+    if(s){ const calc=calcularServicio(s); row.style.display='block'; ps.textContent='$'+fmt(calc.precioSugerido);
+      document.getElementById('pago-monto-ef')&&(document.getElementById('pago-monto-ef').placeholder=fmt(calc.precioSugerido));
+      document.getElementById('pago-monto-tr')&&(document.getElementById('pago-monto-tr').placeholder=fmt(calc.precioSugerido));
+    }
+  } else row.style.display='none';
+  updatePagoTotal();
+}
+
+function setPagoForma(f){
+  pagoForma=f;
+  ['efectivo','transferencia','mixto'].forEach(x=>{
+    document.getElementById('mb-'+x)?.classList.toggle('active',x===f);
+  });
+  renderPagoCampos();
+}
+
+function renderPagoCampos(){
+  const el=document.getElementById('pago-campos');
+  if(pagoForma==='efectivo') el.innerHTML=`<div class="form-group"><label class="form-label">Monto efectivo ($) *</label><input class="form-input" type="number" id="pago-monto-ef" placeholder="0" oninput="updatePagoTotal()"></div>`;
+  else if(pagoForma==='transferencia') el.innerHTML=`<div class="form-group"><label class="form-label">Monto transferencia ($) *</label><input class="form-input" type="number" id="pago-monto-tr" placeholder="0" oninput="updatePagoTotal()"></div>`;
+  else el.innerHTML=`<div class="form-row">
+    <div class="form-group"><label class="form-label">Efectivo ($)</label><input class="form-input" type="number" id="pago-monto-ef" placeholder="0" oninput="updatePagoTotal()"></div>
+    <div class="form-group"><label class="form-label">Transferencia ($)</label><input class="form-input" type="number" id="pago-monto-tr" placeholder="0" oninput="updatePagoTotal()"></div>
+  </div>`;
+  updatePagoTotal();
+}
+
+function updatePagoTotal(){
+  const ef=parseFloat(document.getElementById('pago-monto-ef')?.value)||0;
+  const tr=parseFloat(document.getElementById('pago-monto-tr')?.value)||0;
+  const total=ef+tr;
+  const row=document.getElementById('pago-total-row');
+  if(total>0){ row.style.display='block'; document.getElementById('pago-total-val').textContent='$'+fmt(total); }
+  else row.style.display='none';
+}
+
+function savePago(){
+  const ef=parseFloat(document.getElementById('pago-monto-ef')?.value)||0;
+  const tr=parseFloat(document.getElementById('pago-monto-tr')?.value)||0;
+  const total=ef+tr;
+  if(!total){ toast('Ingresá el monto','error'); return; }
+  const svcId=document.getElementById('pago-svc').value;
+  const svc=servicios.find(s=>s.id===svcId);
+  const obj={id:uid(),
+    servicioId:svcId||null,
+    servicioNombre:svc?.nombre||'Manual',
+    clienteNombre:document.getElementById('pago-cliente').value.trim(),
+    fecha:document.getElementById('pago-fecha').value||new Date().toISOString(),
+    forma:pagoForma,efectivo:ef||null,transferencia:tr||null,total};
+  pagos.push(obj); save(); closeModal(); renderCaja(); toast('Pago registrado');
+}
+
+function deletePago(id){
+  if(!confirm('¿Eliminar este registro?')) return;
+  pagos=pagos.filter(p=>p.id!==id); save(); renderCaja(); toast('Registro eliminado');
+}
+
+// ═══════════════════════════════════════════════
+// ARQUEO
+// ═══════════════════════════════════════════════
+function renderArqueo(){
+  document.getElementById('topbarActions').innerHTML=`
+    <button class="btn btn-secondary" onclick="exportarJSON()">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Exportar JSON
+    </button>`;
+  const hoy=new Date().toDateString();
+  const hoyPagos=pagos.filter(p=>new Date(p.fecha).toDateString()===hoy);
+  const efHoy=hoyPagos.reduce((a,p)=>a+(p.efectivo||0),0);
+  const trHoy=hoyPagos.reduce((a,p)=>a+(p.transferencia||0),0);
+
+  const mes=new Date().getMonth(), anio=new Date().getFullYear();
+  const mesPagos=pagos.filter(p=>{const d=new Date(p.fecha);return d.getMonth()===mes&&d.getFullYear()===anio});
+  const efMes=mesPagos.reduce((a,p)=>a+(p.efectivo||0),0);
+  const trMes=mesPagos.reduce((a,p)=>a+(p.transferencia||0),0);
+  const totalMes=mesPagos.reduce((a,p)=>a+p.total,0);
+  const costoEstimadoMes=servicios.reduce((_,__)=>0,0);
+
+  document.getElementById('mainContent').innerHTML=`
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="card">
+      <div class="section-title" style="margin-bottom:16px">Arqueo de hoy · ${new Date().toLocaleDateString('es-AR',{weekday:'long',day:'2-digit',month:'long'})}</div>
+      <div class="cost-breakdown">
+        <div class="cost-row"><span class="cost-label">Efectivo en caja</span><span>$${fmt(efHoy)}</span></div>
+        <div class="cost-row"><span class="cost-label">Transferencias</span><span>$${fmt(trHoy)}</span></div>
+        <div class="cost-row total"><span class="cost-label">Total facturado</span><span class="cost-val">$${fmt(efHoy+trHoy)}</span></div>
+      </div>
+      <div class="mt-3">
+        <div class="text-sm text-muted mb-1">Servicios realizados hoy</div>
+        ${hoyPagos.length===0?`<p class="text-sm text-muted">Ningún pago registrado hoy</p>`:
+          hoyPagos.map(p=>`<div class="ingredient-row" style="margin-bottom:4px">
+            <div class="flex1"><div class="text-sm font-medium">${p.servicioNombre||'Manual'}</div><div class="text-xs text-muted">${p.clienteNombre||'Sin nombre'}</div></div>
+            <span class="pago-chip pago-${p.forma}">${p.forma}</span>
+            <div class="cost-display">$${fmt(p.total)}</div>
+          </div>`).join('')}
+      </div>
+    </div>
+    <div class="card">
+      <div class="section-title" style="margin-bottom:16px">Resumen del mes</div>
+      <div class="stats-grid" style="grid-template-columns:1fr 1fr">
+        <div class="stat-card"><div class="stat-label">Total mes</div><div class="stat-value">$${fmt(totalMes)}</div></div>
+        <div class="stat-card"><div class="stat-label">Servicios</div><div class="stat-value">${mesPagos.length}</div></div>
+      </div>
+      <div class="cost-breakdown mt-3">
+        <div class="cost-row"><span class="cost-label">Efectivo del mes</span><span>$${fmt(efMes)}</span></div>
+        <div class="cost-row"><span class="cost-label">Transferencias del mes</span><span>$${fmt(trMes)}</span></div>
+        <div class="cost-row"><span class="cost-label">Sueldo manicurista</span><span class="stat-down">— $${fmt(config.sueldoMensual)}</span></div>
+        <div class="cost-row total"><span class="cost-label">Resultado estimado</span><span class="cost-val ${totalMes-config.sueldoMensual>=0?'stat-up':'stat-down'}" style="color:${totalMes-config.sueldoMensual>=0?'var(--success)':'var(--danger)'}">$${fmt(totalMes-config.sueldoMensual)}</span></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════
+// ESTADÍSTICAS
+// ═══════════════════════════════════════════════
+function renderEstadisticas(){
+  document.getElementById('topbarActions').innerHTML='';
+  const meses=[];
+  for(let i=5;i>=0;i--){
+    const d=new Date(); d.setMonth(d.getMonth()-i);
+    const m=d.getMonth(), a=d.getFullYear();
+    const ps=pagos.filter(p=>{const pd=new Date(p.fecha);return pd.getMonth()===m&&pd.getFullYear()===a});
+    meses.push({label:d.toLocaleDateString('es-AR',{month:'short'}),total:ps.reduce((s,p)=>s+p.total,0),count:ps.length});
+  }
+  const maxTotal=Math.max(...meses.map(m=>m.total),1);
+  const servicioCount={};
+  pagos.forEach(p=>{ if(p.servicioNombre) servicioCount[p.servicioNombre]=(servicioCount[p.servicioNombre]||0)+1; });
+  const top5=Object.entries(servicioCount).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const maxCount=Math.max(...top5.map(x=>x[1]),1);
+
+  const ef=pagos.reduce((a,p)=>a+(p.efectivo||0),0);
+  const tr=pagos.reduce((a,p)=>a+(p.transferencia||0),0);
+  const gt=ef+tr;
+
+  document.getElementById('mainContent').innerHTML=`
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="card">
+      <div class="section-title" style="margin-bottom:20px">Ingresos últimos 6 meses</div>
+      <div style="display:flex;align-items:flex-end;gap:8px;height:140px;margin-bottom:8px">
+        ${meses.map(m=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+          <div style="font-size:10px;color:var(--text3);text-align:center">$${fmt(m.total)}</div>
+          <div style="width:100%;background:var(--accent2);border-radius:4px 4px 0 0;height:${m.total?Math.max(8,Math.round((m.total/maxTotal)*100))+'px':'4px'};transition:height 0.3s"></div>
+          <div style="font-size:11px;color:var(--text3)">${m.label}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+    <div class="card">
+      <div class="section-title" style="margin-bottom:16px">Servicios más realizados</div>
+      ${top5.length===0?`<p class="text-sm text-muted">Sin datos suficientes</p>`:
+        top5.map(([nom,cnt])=>`<div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+            <span>${nom}</span><span class="font-medium">${cnt}x</span>
+          </div>
+          <div style="height:6px;background:var(--bg2);border-radius:3px">
+            <div style="height:6px;background:var(--accent);border-radius:3px;width:${Math.round((cnt/maxCount)*100)}%"></div>
+          </div>
+        </div>`).join('')}
+    </div>
+  </div>
+  <div class="card mt-4">
+    <div class="section-title" style="margin-bottom:16px">Distribución formas de pago (total histórico)</div>
+    <div class="ring-wrap">
+      <svg width="100" height="100" viewBox="0 0 36 36" style="transform:rotate(-90deg);flex-shrink:0">
+        ${gt>0?`
+        <circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--bg2)" stroke-width="4"/>
+        <circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--accent)" stroke-width="4"
+          stroke-dasharray="${Math.round((ef/gt)*100)} ${100-Math.round((ef/gt)*100)}" stroke-dashoffset="0"/>
+        <circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--info)" stroke-width="4"
+          stroke-dasharray="${Math.round((tr/gt)*100)} ${100-Math.round((tr/gt)*100)}"
+          stroke-dashoffset="${-Math.round((ef/gt)*100)}"/>
+        `:`<circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--bg2)" stroke-width="4"/>`}
+      </svg>
+      <div class="ring-legend">
+        <div class="ring-legend-item"><div class="ring-dot" style="background:var(--accent)"></div><div>Efectivo — $${fmt(ef)} (${gt?Math.round((ef/gt)*100):0}%)</div></div>
+        <div class="ring-legend-item"><div class="ring-dot" style="background:var(--info)"></div><div>Transferencia — $${fmt(tr)} (${gt?Math.round((tr/gt)*100):0}%)</div></div>
+        <div class="ring-legend-item"><div class="ring-dot" style="background:var(--bg2)"></div><div>Total histórico — $${fmt(gt)}</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="stats-grid mt-4">
+    <div class="stat-card"><div class="stat-label">Total insumos</div><div class="stat-value">${insumos.length}</div></div>
+    <div class="stat-card"><div class="stat-label">Total servicios</div><div class="stat-value">${servicios.length}</div></div>
+    <div class="stat-card"><div class="stat-label">Total pagos</div><div class="stat-value">${pagos.length}</div></div>
+    <div class="stat-card"><div class="stat-label">Costo/turno actual</div><div class="stat-value">$${fmt(costoPorTurno())}</div></div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════
+// CONFIGURACIÓN
+// ═══════════════════════════════════════════════
+function renderConfig(){
+  document.getElementById('topbarActions').innerHTML='';
+  document.getElementById('mainContent').innerHTML=`
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="card">
+      <div class="section-title" style="margin-bottom:16px">Mano de obra</div>
+      <div class="form-group">
+        <label class="form-label">Sueldo mensual manicurista ($)</label>
+        <input class="form-input" type="number" id="cfg-sueldo" value="${config.sueldoMensual}" oninput="updateCfgCalc()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Turnos/servicios por mes</label>
+        <input class="form-input" type="number" id="cfg-turnos" value="${config.turnosMensuales}" oninput="updateCfgCalc()">
+      </div>
+      <div class="calc-display" id="cfg-cpt">
+        Costo por turno: <strong>$${fmt(costoPorTurno())}</strong>
+      </div>
+    </div>
+    <div class="card">
+      <div class="section-title" style="margin-bottom:16px">Rentabilidad</div>
+      <div class="form-group">
+        <label class="form-label">Margen de ganancia deseado (%)</label>
+        <input class="form-input" type="number" id="cfg-margen" value="${config.margenGanancia}" min="0" max="200">
+        <div class="form-hint">Porcentaje que se agrega sobre el costo real</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Gastos operativos (%)</label>
+        <input class="form-input" type="number" id="cfg-gastos" value="${config.gastosOperativos}" min="0">
+        <div class="form-hint">Alquiler, servicios, etc. como % del costo</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Impuestos (%)</label>
+        <input class="form-input" type="number" id="cfg-imp" value="${config.impuestos}" min="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Comisión (%)</label>
+        <input class="form-input" type="number" id="cfg-com" value="${config.comision}" min="0">
+        <div class="form-hint">Para servicios con porcentaje a manicurista</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mt-4">
+    <div class="section-title" style="margin-bottom:16px">Perfil de usuario</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Nombre</label>
+        <input class="form-input" id="cfg-nombre" value="${config.userName||'Barbi'}" placeholder="Tu nombre">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Rol</label>
+        <select class="form-input form-select" id="cfg-rol">
+          ${['Administradora','Manicurista','Dueña','Empleada'].map(r=>`<option ${(config.userRole||'Administradora')===r?'selected':''}>${r}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mt-4">
+    <div class="section-title" style="margin-bottom:12px">Backup de datos</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-secondary" onclick="exportarJSON()">
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Exportar todo en JSON
+      </button>
+      <label class="btn btn-secondary" style="cursor:pointer">
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Importar JSON
+        <input type="file" accept=".json" style="display:none" onchange="importarJSON(event)">
+      </label>
+    </div>
+    <p class="text-xs text-muted mt-2">Los datos se guardan automáticamente en tu navegador (localStorage)</p>
+  </div>
+
+  <div style="display:flex;justify-content:flex-end;margin-top:16px">
+    <button class="btn btn-primary" onclick="saveConfig()">Guardar configuración</button>
+  </div>`;
+}
+
+function updateCfgCalc(){
+  const s=parseFloat(document.getElementById('cfg-sueldo')?.value)||0;
+  const t=parseFloat(document.getElementById('cfg-turnos')?.value)||1;
+  const el=document.getElementById('cfg-cpt');
+  if(el) el.innerHTML=`Costo por turno: <strong>$${fmt(s/t)}</strong>`;
+}
+
+function saveConfig(){
+  config.sueldoMensual=parseFloat(document.getElementById('cfg-sueldo').value)||0;
+  config.turnosMensuales=parseFloat(document.getElementById('cfg-turnos').value)||1;
+  config.margenGanancia=parseFloat(document.getElementById('cfg-margen').value)||0;
+  config.gastosOperativos=parseFloat(document.getElementById('cfg-gastos').value)||0;
+  config.impuestos=parseFloat(document.getElementById('cfg-imp').value)||0;
+  config.comision=parseFloat(document.getElementById('cfg-com').value)||0;
+  config.userName=document.getElementById('cfg-nombre').value.trim()||'Barbi';
+  config.userRole=document.getElementById('cfg-rol').value;
+  save();
+  document.getElementById('userName').textContent=config.userName;
+  document.getElementById('userRole').textContent=config.userRole;
+  document.getElementById('userAvatar').textContent=config.userName.charAt(0).toUpperCase();
+  toast('Configuración guardada');
+  renderConfig();
+}
+
+// ═══════════════════════════════════════════════
+// BACKUP
+// ═══════════════════════════════════════════════
+function exportarJSON(){
+  const data={insumos,servicios,pagos,config,exportedAt:new Date().toISOString()};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download='barbi-manicura-backup.json'; a.click();
+  toast('Backup exportado');
+}
+
+function importarJSON(event){
+  const file=event.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const data=JSON.parse(e.target.result);
+      if(data.insumos) insumos=data.insumos;
+      if(data.servicios) servicios=data.servicios;
+      if(data.pagos) pagos=data.pagos;
+      if(data.config) config={...config,...data.config};
+      save(); toast('Datos importados correctamente'); navigate(currentPage);
+    }catch{ toast('Error al leer el archivo JSON','error'); }
+  };
+  reader.readAsText(file);
+}
+
+// ═══════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════
+if(config.userName){ document.getElementById('userName').textContent=config.userName; document.getElementById('userAvatar').textContent=config.userName.charAt(0).toUpperCase(); }
+if(config.userRole) document.getElementById('userRole').textContent=config.userRole;
+navigate('dashboard');
+</script>
+</body>
+</html>
