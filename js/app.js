@@ -27,7 +27,8 @@ let config   = {
   userRole: 'Administradora',
   saldoEfectivo: 0,
   saldoCuenta: 0,
-  salarioObjetivoManicurista: 0
+  salarioObjetivoManicurista: 0,
+  categorias: ['Geles', 'Tips', 'Primers', 'Limas', 'Pinturas', 'Equipamiento', 'Otros']
 };
 
 let dbReady = false;
@@ -168,22 +169,15 @@ function calcularServicio(servicio) {
   };
 }
 
-function calcularConPrecioReal(precioReal) {
-  const comisionMonto = precioReal * ((config.comisionPct || 0) / 100);
-  const gananciaNeta = precioReal - comisionMonto;
-  return { comisionMonto, gananciaNeta };
-}
-
 // ── NAVIGATION ────────────────────────────────────────────
 let currentPage = 'dashboard';
+let cajaTab = 'pagos';
 
 const pageTitles = {
   dashboard: 'Dashboard',
   insumos: 'Insumos',
   servicios: 'Servicios',
   caja: 'Caja',
-  movimientos: 'Movimientos',
-  arqueo: 'Arqueo de Caja',
   estadisticas: 'Estadísticas',
   config: 'Configuración'
 };
@@ -193,13 +187,16 @@ const pageRenderers = {
   insumos: renderInsumos,
   servicios: renderServicios,
   caja: renderCaja,
-  movimientos: renderMovimientos,
-  arqueo: renderArqueo,
   estadisticas: renderEstadisticas,
   config: renderConfigPage
 };
 
+window.setCajaTab = function (tab) { cajaTab = tab; renderCaja(); };
+
 function navigate(page) {
+  // Redirigir movimientos y arqueo a la caja con su tab correspondiente
+  if (page === 'movimientos') { cajaTab = 'movimientos'; page = 'caja'; }
+  if (page === 'arqueo')      { cajaTab = 'arqueo';      page = 'caja'; }
   currentPage = page;
   document.querySelectorAll('.nav-item').forEach(el => {
     el.classList.toggle('active', el.dataset.page === page);
@@ -273,9 +270,6 @@ function renderDashboard() {
   const totalHoy = pagosHoy.reduce((a, p) => a + p.total, 0);
   const comisionHoy = pagosHoy.reduce((a, p) => a + (p.comisionMonto || 0), 0);
   const gananciaNetaHoy = pagosHoy.reduce((a, p) => a + (p.gananciaNeta || 0), 0);
-  const efectivoHoy = pagosHoy.reduce((a, p) => a + (p.efectivo || 0), 0);
-  const transHoy = pagosHoy.reduce((a, p) => a + (p.transferencia || 0), 0);
-
   const mes = new Date().getMonth();
   const anio = new Date().getFullYear();
   const pagosMes = pagos.filter(p => {
@@ -506,6 +500,7 @@ function renderDashboard() {
 //  INSUMOS (sin cambios, funciona bien)
 // ════════════════════════════════════════════════════════════
 let insumoSearch = '';
+window.setInsumoSearch = function (v) { insumoSearch = v; renderInsumos(); };
 
 function renderInsumos() {
   document.getElementById('topbarActions').innerHTML = `
@@ -522,7 +517,7 @@ function renderInsumos() {
     <div class="search-wrap">
       <div class="search-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
       <input class="form-input" placeholder="Buscar por nombre o categoría…" value="${insumoSearch}"
-        oninput="insumoSearch=this.value;renderInsumos()" style="padding-left:32px">
+        oninput="setInsumoSearch(this.value)" style="padding-left:32px">
     </div>
     ${filtered.length === 0
       ? `<div class="empty">
@@ -578,7 +573,10 @@ function openNuevoInsumo(id) {
       </div>
       <div class="form-group">
         <label class="form-label">Categoría *</label>
-        <input class="form-input" id="ins-cat" value="${ins?.categoria || ''}" placeholder="Ej: Geles, Tips, Primers">
+        <select class="form-input form-select" id="ins-cat">
+          <option value="">— Seleccionar —</option>
+          ${(config.categorias || []).map(c => `<option ${ins?.categoria === c ? 'selected' : ''}>${c}</option>`).join('')}
+        </select>
       </div>
     </div>
     <div class="form-row-3">
@@ -660,6 +658,12 @@ window.deleteInsumo = async function (id) {
 //  SERVICIOS — FIX: DEEP COPY DE INGREDIENTES
 // ════════════════════════════════════════════════════════════
 let tempIngredientes = [];
+let tempPrecioCustom = 0; // 0 = usar precio sugerido calculado
+
+window.setSvcPrecioCustom = function (val) {
+  tempPrecioCustom = parseFloat(val) || 0;
+  updateSvcPreview();
+};
 
 function renderServicios() {
   document.getElementById('topbarActions').innerHTML = `
@@ -689,6 +693,7 @@ function renderServicios() {
               ${s.tiempo ? `<span class="badge badge-neutral">⏱ ${s.tiempo} min</span>` : ''}
               ${s.dificultad ? `<span class="badge badge-info">${s.dificultad}</span>` : ''}
               <span class="badge badge-neutral">${(s.ingredientes || []).length} insumos</span>
+              ${s.descuento > 0 ? `<span class="badge badge-warn">−${s.descuento}% promo</span>` : ''}
             </div>
             <div class="cost-breakdown" style="margin-top: 10px; margin-bottom: 0;">
               <div class="cost-section-label">Desglose de costos</div>
@@ -696,7 +701,11 @@ function renderServicios() {
               <div class="cost-row"><span class="cost-label">Operativo</span><span>$${fmt(c.costoOperativo)}</span></div>
               <div class="cost-row subtotal"><span class="cost-label">Costo base</span><span class="font-medium">$${fmt(c.costoBase)}</span></div>
               <div class="cost-row"><span class="cost-label">Margen ${config.margenGanancia}%</span><span>$${fmt(c.margen)}</span></div>
-              <div class="cost-row total"><span class="cost-label">Precio cobrado</span><span class="cost-val">$${fmt(c.precioSugerido)}</span></div>
+              ${s.descuento > 0
+                ? `<div class="cost-row"><span class="cost-label text-hint" style="text-decoration:line-through">Precio base</span><span class="text-hint" style="text-decoration:line-through">$${fmt(c.precioSugerido)}</span></div>
+                   <div class="cost-row total"><span class="cost-label">Precio con descuento</span><span class="cost-val">$${fmt(c.precioSugerido * (1 - s.descuento / 100))}</span></div>`
+                : `<div class="cost-row total"><span class="cost-label">Precio cobrado</span><span class="cost-val">$${fmt(c.precioSugerido)}</span></div>`
+              }
               ${config.comisionPct > 0 ? `
               <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--accent2);">
                 <div class="cost-section-label">Distribución</div>
@@ -712,8 +721,8 @@ function renderServicios() {
 
 window.openNuevoServicio = function (id) {
   const s = id ? servicios.find(sv => sv.id === id) : null;
-  // FIX: Deep copy de ingredientes para evitar mutaciones
   tempIngredientes = s ? JSON.parse(JSON.stringify(s.ingredientes || [])) : [];
+  tempPrecioCustom = 0;
   openModal(`
   <div class="modal-header">
     <div class="modal-title">${s ? 'Editar servicio' : 'Nuevo servicio'}</div>
@@ -742,6 +751,13 @@ window.openNuevoServicio = function (id) {
           ${['Básico', 'Intermedio', 'Avanzado', 'Premium'].map(d =>
             `<option ${s?.dificultad === d ? 'selected' : ''}>${d}</option>`).join('')}
         </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Descuento / Promoción (%)</label>
+        <input class="form-input" type="number" id="svc-descuento" value="${s?.descuento || ''}" placeholder="0" min="0" max="100">
+        <div class="form-hint">Dejar en 0 si no hay promoción activa</div>
       </div>
     </div>
     <div class="divider"></div>
@@ -805,30 +821,56 @@ function updateSvcPreview() {
   if (!el) return;
   const c = calcularServicio({ ingredientes: tempIngredientes });
   if (c.costoBase <= 0) { el.innerHTML = ''; return; }
+
+  const precioEfectivo = tempPrecioCustom > 0 ? tempPrecioCustom : c.precioSugerido;
+  const comCustom = precioEfectivo * ((config.comisionPct || 0) / 100);
+  const netaCustom = precioEfectivo - c.costoMateriales - c.costoOperativo - comCustom;
+  const margenPct  = precioEfectivo > 0 ? Math.round((netaCustom / precioEfectivo) * 100) : 0;
+  const comPct     = precioEfectivo > 0 ? Math.round((comCustom / precioEfectivo) * 100) : 0;
+  const costoPct   = precioEfectivo > 0 ? Math.round(((c.costoMateriales + c.costoOperativo) / precioEfectivo) * 100) : 0;
+
   el.innerHTML = `<div class="cost-breakdown">
-    <div class="cost-section-label">Cálculo en tiempo real</div>
+    <div class="cost-section-label">Costos</div>
     <div class="cost-row"><span class="cost-label">Materiales</span><span>$${fmt(c.costoMateriales)}</span></div>
     <div class="cost-row"><span class="cost-label">Operativo</span><span>$${fmt(c.costoOperativo)}</span></div>
     <div class="cost-row subtotal"><span class="cost-label">Costo base</span><span>$${fmt(c.costoBase)}</span></div>
-    <div class="cost-row"><span class="cost-label">Margen ${config.margenGanancia}%</span><span>$${fmt(c.margen)}</span></div>
-    <div class="cost-row total"><span class="cost-label">Precio sugerido</span><span class="cost-val">$${fmt(c.precioSugerido)}</span></div>
-    ${config.comisionPct > 0 ? `
-    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--accent2);">
-      <div class="cost-row"><span class="cost-label text-danger">Comisión manicurista ${config.comisionPct}%</span><span class="text-danger">— $${fmt(c.comisionMonto)}</span></div>
-      <div class="cost-row"><span class="cost-label text-success">Ganancia studio</span><span class="text-success font-medium">$${fmt(c.gananciaNeta)}</span></div>
+
+    <div class="cost-section-label" style="margin-top:10px">Precio a cobrar</div>
+    <div class="cost-row" style="align-items:center">
+      <span class="cost-label">Precio sugerido</span>
+      <span class="text-hint text-sm">$${fmt(c.precioSugerido)}</span>
     </div>
-    ` : ''}
+    <div class="form-group" style="margin:6px 0 10px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="text-sm" style="color:var(--text2);white-space:nowrap">Precio final $</span>
+        <input class="form-input" type="number" style="max-width:130px"
+          placeholder="${Math.round(c.precioSugerido)}"
+          value="${tempPrecioCustom > 0 ? tempPrecioCustom : ''}"
+          oninput="setSvcPrecioCustom(this.value)">
+        ${tempPrecioCustom > 0
+          ? `<button class="btn btn-ghost btn-sm" onclick="setSvcPrecioCustom(0);this.closest('.form-group').querySelector('input').value=''" style="white-space:nowrap">Usar sugerido</button>`
+          : ''}
+      </div>
+    </div>
+
+    <div class="cost-section-label">Distribución a $${fmt(precioEfectivo)}</div>
+    <div class="cost-row"><span class="cost-label">Costos (${costoPct}%)</span><span>$${fmt(c.costoMateriales + c.costoOperativo)}</span></div>
+    ${config.comisionPct > 0 ? `
+    <div class="cost-row"><span class="cost-label text-danger">Comisión manicurista ${comPct}%</span><span class="text-danger">$${fmt(comCustom)}</span></div>` : ''}
+    <div class="cost-row total"><span class="cost-label text-success">Ganancia studio ${margenPct}%</span><span class="text-success font-medium cost-val">$${fmt(netaCustom)}</span></div>
   </div>`;
 }
 
 window.saveServicio = async function (id) {
   const nombre = document.getElementById('svc-nombre').value.trim();
   if (!nombre) { toast('Ingresá el nombre del servicio', 'error'); return; }
+  const descuento = parseFloat(document.getElementById('svc-descuento').value) || 0;
   const obj = {
     id: id || uid(), nombre,
     descripcion: document.getElementById('svc-desc').value.trim(),
     tiempo: parseInt(document.getElementById('svc-tiempo').value) || 0,
     dificultad: document.getElementById('svc-dif').value,
+    descuento: descuento > 0 ? descuento : 0,
     ingredientes: tempIngredientes.filter(i => i.insumoId && i.cantidad > 0)
   };
   await saveDoc('servicios', obj);
@@ -848,35 +890,64 @@ window.deleteServicio = async function (id) {
 };
 
 // ════════════════════════════════════════════════════════════
-//  CAJA — PAGOS (con desglose completo)
+//  CAJA — TABS: Cobros · Movimientos · Arqueo
 // ════════════════════════════════════════════════════════════
 let cajaMonth = new Date().toISOString().slice(0, 7);
 let cajaBusqueda = '';
+let movBusqueda = '';
 let pagoForma = 'efectivo';
+let pagoTotalFijo = 0; // >0 cuando viene de un servicio seleccionado
+
+window.setCajaBusqueda = function (v) { cajaBusqueda = v; renderCaja(); };
+window.setCajaMonth    = function (v) { cajaMonth = v;    renderCaja(); };
+window.setMovBusqueda  = function (v) { movBusqueda = v;  renderCaja(); };
+
+function cajaTabBar() {
+  return `<div class="tabs-bar">
+    <button class="tab-btn ${cajaTab==='pagos'?'active':''}" onclick="setCajaTab('pagos')">Cobros</button>
+    <button class="tab-btn ${cajaTab==='movimientos'?'active':''}" onclick="setCajaTab('movimientos')">Movimientos</button>
+    <button class="tab-btn ${cajaTab==='arqueo'?'active':''}" onclick="setCajaTab('arqueo')">Arqueo</button>
+  </div>`;
+}
 
 function renderCaja() {
-  document.getElementById('topbarActions').innerHTML = `
-    <button class="btn btn-primary" onclick="openNuevoPago()">${iconPlus()} Registrar pago</button>`;
+  if (cajaTab === 'pagos') {
+    document.getElementById('topbarActions').innerHTML =
+      `<button class="btn btn-primary" onclick="openNuevoPago()">${iconPlus()} Registrar cobro</button>`;
+    renderCajaPagos();
+  } else if (cajaTab === 'movimientos') {
+    document.getElementById('topbarActions').innerHTML =
+      `<button class="btn btn-primary" onclick="openNuevoMovimiento()">${iconPlus()} Nuevo movimiento</button>`;
+    renderCajaMovimientos();
+  } else {
+    document.getElementById('topbarActions').innerHTML =
+      `<button class="btn btn-secondary" onclick="exportarJSON()">${iconDownload()} Exportar</button>`;
+    renderCajaArqueo();
+  }
+}
 
+function renderCajaPagos() {
   const filtrados = pagos.filter(p => {
     const matchMes = !cajaMonth || p.fecha.slice(0, 7) === cajaMonth;
-    const matchQ = !cajaBusqueda
-      || (p.servicioNombre || '').toLowerCase().includes(cajaBusqueda.toLowerCase())
-      || (p.clienteNombre || '').toLowerCase().includes(cajaBusqueda.toLowerCase());
+    const q = cajaBusqueda.toLowerCase();
+    const matchQ = !q
+      || (p.servicioNombre || '').toLowerCase().includes(q)
+      || (p.clienteNombre || '').toLowerCase().includes(q);
     return matchMes && matchQ;
   }).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
 
-  const totalEf = filtrados.reduce((a, p) => a + (p.efectivo || 0), 0);
-  const totalTr = filtrados.reduce((a, p) => a + (p.transferencia || 0), 0);
+  const totalEf  = filtrados.reduce((a, p) => a + (p.efectivo || 0), 0);
+  const totalTr  = filtrados.reduce((a, p) => a + (p.transferencia || 0), 0);
   const totalGen = filtrados.reduce((a, p) => a + p.total, 0);
-  const totalComision = filtrados.reduce((a, p) => a + (p.comisionMonto || 0), 0);
-  const totalGananciaNeta = filtrados.reduce((a, p) => a + (p.gananciaNeta || 0), 0);
+  const totalCom = filtrados.reduce((a, p) => a + (p.comisionMonto || 0), 0);
+  const totalNet = filtrados.reduce((a, p) => a + (p.gananciaNeta || 0), 0);
 
   document.getElementById('mainContent').innerHTML = `
-  <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
-    <div class="stat-card"><div class="stat-label">Total ingresos</div><div class="stat-value">$${fmt(totalGen)}</div><div class="stat-sub">${filtrados.length} servicios</div></div>
-    <div class="stat-card"><div class="stat-label">Ganancia studio</div><div class="stat-value stat-up">$${fmt(totalGananciaNeta)}</div></div>
-    <div class="stat-card"><div class="stat-label">Comisión manicurista</div><div class="stat-value stat-down">$${fmt(totalComision)}</div></div>
+  ${cajaTabBar()}
+  <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
+    <div class="stat-card"><div class="stat-label">Total ingresos</div><div class="stat-value">$${fmt(totalGen)}</div><div class="stat-sub">${filtrados.length} cobros</div></div>
+    <div class="stat-card"><div class="stat-label">Ganancia studio</div><div class="stat-value stat-up">$${fmt(totalNet)}</div></div>
+    <div class="stat-card"><div class="stat-label">Comisión manicurista</div><div class="stat-value stat-down">$${fmt(totalCom)}</div></div>
     <div class="stat-card"><div class="stat-label">Efectivo</div><div class="stat-value">$${fmt(totalEf)}</div></div>
     <div class="stat-card"><div class="stat-label">Transferencias</div><div class="stat-value">$${fmt(totalTr)}</div></div>
   </div>
@@ -885,56 +956,170 @@ function renderCaja() {
       <div class="search-wrap" style="flex:1;min-width:180px;margin-bottom:0">
         <div class="search-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
         <input class="form-input" placeholder="Buscar servicio o cliente…" value="${cajaBusqueda}"
-          oninput="cajaBusqueda=this.value;renderCaja()" style="padding-left:32px">
+          oninput="setCajaBusqueda(this.value)" style="padding-left:32px">
       </div>
       <input type="month" class="form-input" style="width:160px" value="${cajaMonth}"
-        onchange="cajaMonth=this.value;renderCaja()">
+        onchange="setCajaMonth(this.value)">
     </div>
     ${filtrados.length === 0
-      ? `<div class="empty"><h3>Sin movimientos</h3><p>Registrá un pago para comenzar</p></div>`
+      ? `<div class="empty"><h3>Sin cobros</h3><p>Registrá un cobro para comenzar</p></div>`
       : `<div class="table-wrap"><table>
-          <thead><tr><th>Fecha</th><th>Servicio</th><th>Cliente</th><th>Materiales</th><th>Operativo</th><th>Comisión</th><th>Ganancia studio</th><th>Total</th><th>Forma</th><th></th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Servicio</th><th>Cliente</th><th>Comisión</th><th>Ganancia studio</th><th>Total</th><th>Forma</th><th></th></tr></thead>
           <tbody>
             ${filtrados.map(p => `<tr>
-              <td class="td-muted text-sm" style="white-space:nowrap">${new Date(p.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
+              <td class="td-muted text-sm" style="white-space:nowrap">${new Date(p.fecha).toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}</td>
               <td class="font-medium">${p.servicioNombre || 'Manual'}</td>
               <td class="td-muted">${p.clienteNombre || '—'}</td>
-              <td class="td-num text-sm">$${fmt(p.costoMateriales || 0)}</td>
-              <td class="td-num text-sm">$${fmt(p.costoOperativo || 0)}</td>
               <td class="td-num text-danger text-sm">$${fmt(p.comisionMonto || 0)}</td>
               <td class="td-num text-success font-medium">$${fmt(p.gananciaNeta || 0)}</td>
               <td class="td-num font-medium">$${fmt(p.total)}</td>
               <td><span class="pago-chip pago-${p.forma}">${p.forma === 'efectivo' ? 'Efectivo' : p.forma === 'transferencia' ? 'Transfer.' : 'Mixto'}</span></td>
-              <td><button class="btn btn-danger btn-sm" onclick="deletePago('${p.id}')">${iconTrash()}</button></td>
+              <td><button class="btn btn-danger btn-sm" onclick="deletePago('${p.id}')" title="Eliminar">${iconTrash()}</button></td>
             </tr>`).join('')}
           </tbody>
-        </table></div>`
-    }
+        </table></div>`}
   </div>`;
 }
 
+function renderCajaMovimientos() {
+  const q = movBusqueda.toLowerCase();
+  const filtrados = [...movimientos]
+    .filter(m => !q || m.descripcion.toLowerCase().includes(q) || m.tipo.includes(q))
+    .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+  const compras  = filtrados.filter(m => m.tipo === 'compra').reduce((a, m) => a + m.monto, 0);
+  const gastos   = filtrados.filter(m => m.tipo === 'gasto').reduce((a, m) => a + m.monto, 0);
+
+  document.getElementById('mainContent').innerHTML = `
+  ${cajaTabBar()}
+  <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
+    <div class="stat-card"><div class="stat-label">Compras insumos</div><div class="stat-value stat-down">— $${fmt(compras)}</div></div>
+    <div class="stat-card"><div class="stat-label">Gastos operativos</div><div class="stat-value stat-down">— $${fmt(gastos)}</div></div>
+  </div>
+  <div class="card">
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+      <div class="search-wrap" style="flex:1;min-width:180px;margin-bottom:0">
+        <div class="search-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+        <input class="form-input" placeholder="Buscar descripción…" value="${movBusqueda}"
+          oninput="setMovBusqueda(this.value)" style="padding-left:32px">
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="openNuevoMovimiento('compra')">Compra insumos</button>
+      <button class="btn btn-secondary btn-sm" onclick="openNuevoMovimiento('gasto')">Gasto operativo</button>
+      <button class="btn btn-secondary btn-sm" onclick="openNuevoMovimiento('transfer')">Transferencia</button>
+    </div>
+    ${filtrados.length === 0
+      ? `<div class="empty"><h3>Sin movimientos</h3><p>Registrá compras, gastos o transferencias internas</p></div>`
+      : `<div class="table-wrap"><table>
+          <thead><tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Monto</th><th>Notas</th><th></th></tr></thead>
+          <tbody>
+            ${filtrados.map(m => {
+              const badge = m.tipo === 'compra' ? 'badge-warn' : m.tipo === 'gasto' ? 'badge-danger' : 'badge-info';
+              const label = m.tipo === 'compra' ? 'Compra' : m.tipo === 'gasto' ? 'Gasto' : 'Transfer.';
+              return `<tr>
+                <td class="td-muted text-sm">${new Date(m.fecha).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}</td>
+                <td><span class="badge ${badge}">${label}</span></td>
+                <td class="font-medium">${m.descripcion}</td>
+                <td class="td-num font-medium text-danger">— $${fmt(m.monto)}</td>
+                <td class="td-muted text-sm">${m.notas || '—'}</td>
+                <td><button class="btn btn-danger btn-sm" onclick="deleteMovimiento('${m.id}')" title="Eliminar">${iconTrash()}</button></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table></div>`}
+  </div>`;
+}
+
+function renderCajaArqueo() {
+  const mes = new Date().getMonth(), anio = new Date().getFullYear();
+  const mesPagos = pagos.filter(p => { const d = new Date(p.fecha); return d.getMonth() === mes && d.getFullYear() === anio; });
+  const totalIngresos   = mesPagos.reduce((a, p) => a + p.total, 0);
+  const efMes           = mesPagos.reduce((a, p) => a + (p.efectivo || 0), 0);
+  const trMes           = mesPagos.reduce((a, p) => a + (p.transferencia || 0), 0);
+  const comisionMes     = mesPagos.reduce((a, p) => a + (p.comisionMonto || 0), 0);
+  const gananciaNetaMes = mesPagos.reduce((a, p) => a + (p.gananciaNeta || 0), 0);
+  const mesMov    = movimientos.filter(m => { const d = new Date(m.fecha); return d.getMonth() === mes && d.getFullYear() === anio; });
+  const comprasMes    = mesMov.filter(m => m.tipo === 'compra').reduce((a, m) => a + m.monto, 0);
+  const gastosMes     = mesMov.filter(m => m.tipo === 'gasto').reduce((a, m) => a + m.monto, 0);
+  const gastosFijosMes = totalGastosFijosM();
+  const egresosTotales = comisionMes + comprasMes + gastosMes + gastosFijosMes;
+  const resultadoFinal = gananciaNetaMes - egresosTotales;
+  const mesLabel = new Date().toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+
+  document.getElementById('mainContent').innerHTML = `
+  ${cajaTabBar()}
+  <div class="grid-2">
+    <div class="card">
+      <div class="section-title mb-3">Ingresos — ${mesLabel}</div>
+      <div class="cost-breakdown">
+        <div class="cost-row"><span class="cost-label">Efectivo</span><span>$${fmt(efMes)}</span></div>
+        <div class="cost-row"><span class="cost-label">Transferencias</span><span>$${fmt(trMes)}</span></div>
+        <div class="cost-row total"><span class="cost-label">Total facturado</span><span class="cost-val">$${fmt(totalIngresos)}</span></div>
+      </div>
+      <div class="mt-3">
+        <div class="text-sm font-medium mb-2">Saldos actuales</div>
+        <div class="ingredient-row mb-2"><div class="flex1">Efectivo en caja</div><div class="cost-tag font-medium">$${fmt(config.saldoEfectivo || 0)}</div></div>
+        <div class="ingredient-row"><div class="flex1">Saldo en cuenta</div><div class="cost-tag font-medium">$${fmt(config.saldoCuenta || 0)}</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="section-title mb-3">Egresos — ${mesLabel}</div>
+      <div class="cost-breakdown">
+        ${config.comisionPct > 0 ? `<div class="cost-row"><span class="cost-label">Comisión manicurista (${config.comisionPct}%)</span><span class="text-danger">— $${fmt(comisionMes)}</span></div>` : ''}
+        <div class="cost-row"><span class="cost-label">Compras de insumos</span><span class="text-danger">— $${fmt(comprasMes)}</span></div>
+        <div class="cost-row"><span class="cost-label">Gastos operativos</span><span class="text-danger">— $${fmt(gastosMes)}</span></div>
+        <div class="cost-row"><span class="cost-label">Gastos fijos</span><span class="text-danger">— $${fmt(gastosFijosMes)}</span></div>
+        <div class="cost-row total"><span class="cost-label">Total egresos</span><span class="cost-val" style="color:var(--danger)">— $${fmt(egresosTotales)}</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="card mt-4">
+    <div class="section-title mb-3">Resultado del mes</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div style="background:var(--success-bg);border-radius:var(--radius);padding:1rem;border-left:3px solid var(--success)">
+        <div class="text-xs text-success font-medium mb-2">INGRESOS</div>
+        <div style="font-size:24px;font-weight:500;color:var(--success)">+$${fmt(totalIngresos)}</div>
+      </div>
+      <div style="background:var(--danger-bg);border-radius:var(--radius);padding:1rem;border-left:3px solid var(--danger)">
+        <div class="text-xs text-danger font-medium mb-2">EGRESOS</div>
+        <div style="font-size:24px;font-weight:500;color:var(--danger)">— $${fmt(egresosTotales)}</div>
+      </div>
+    </div>
+    <div style="background:${resultadoFinal >= 0 ? 'var(--success-bg)' : 'var(--danger-bg)'};border-radius:var(--radius);padding:1.5rem;margin-top:16px;border-left:4px solid ${resultadoFinal >= 0 ? 'var(--success)' : 'var(--danger)'}">
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:${resultadoFinal >= 0 ? 'var(--success)' : 'var(--danger)'};margin-bottom:8px;font-weight:500">Resultado neto</div>
+      <div style="font-size:32px;font-weight:500;color:${resultadoFinal >= 0 ? 'var(--success)' : 'var(--danger)'}">${resultadoFinal >= 0 ? '+' : '— '}$${fmt(Math.abs(resultadoFinal))}</div>
+      <div style="font-size:13px;color:${resultadoFinal >= 0 ? 'var(--success)' : 'var(--danger)'};margin-top:4px">${resultadoFinal >= 0 ? '✓ Ganancia' : '✗ Pérdida'}</div>
+    </div>
+  </div>`;
+}
+
+// ── Formulario de cobro ────────────────────────────────────
 window.openNuevoPago = function () {
   pagoForma = 'efectivo';
+  pagoTotalFijo = 0;
   openModal(`
   <div class="modal-header">
-    <div class="modal-title">Registrar pago</div>
+    <div class="modal-title">Registrar cobro</div>
     ${modalCloseBtn()}
   </div>
   <div class="modal-body">
     <div class="form-group">
-      <label class="form-label">Servicio</label>
+      <label class="form-label">Servicio (opcional)</label>
       <select class="form-input form-select" id="pago-svc" onchange="onPagoSvcChange(this.value)">
-        <option value="">— Sin servicio asociado —</option>
-        ${servicios.map(s => `<option value="${s.id}">${s.nombre}</option>`).join('')}
+        <option value="">— Cobro manual (sin servicio) —</option>
+        ${servicios.map(s => {
+          const c = calcularServicio(s);
+          const label = s.descuento ? `${s.nombre}  (−${s.descuento}% dto.)` : s.nombre;
+          return `<option value="${s.id}">${label} · $${fmt(c.precioSugerido)}</option>`;
+        }).join('')}
       </select>
     </div>
-    <div id="ps-row" style="display:none" class="cost-breakdown mb-3">
-      <div class="cost-section-label">Cálculo sugerido del servicio</div>
-      <div class="cost-row"><span class="cost-label">Materiales</span><span id="ps-mat">$0</span></div>
-      <div class="cost-row"><span class="cost-label">Operativo</span><span id="ps-op">$0</span></div>
-      <div class="cost-row"><span class="cost-label">Comisión (${config.comisionPct}%)</span><span id="ps-com" class="text-danger">$0</span></div>
-      <div class="cost-row total"><span class="cost-label">Precio sugerido</span><span id="ps-val" class="cost-val">$0</span></div>
+
+    <div id="pago-precio-area">
+      <div class="form-group">
+        <label class="form-label">Monto a cobrar ($) *</label>
+        <input class="form-input" type="number" id="pago-monto-manual" placeholder="0" oninput="updatePagoPreview()">
+      </div>
     </div>
+
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Cliente (opcional)</label>
@@ -945,29 +1130,24 @@ window.openNuevoPago = function () {
         <input type="datetime-local" class="form-input" id="pago-fecha" value="${new Date().toISOString().slice(0, 16)}">
       </div>
     </div>
+
     <div class="form-group">
       <label class="form-label">Forma de pago</label>
       <div class="payment-method">
         <button type="button" class="method-btn active" id="mb-efectivo" onclick="setPagoForma('efectivo')">
-          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><rect x="2" y="7" width="20" height="14" rx="2"/><circle cx="12" cy="14" r="3"/></svg>
-          Efectivo
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><rect x="2" y="7" width="20" height="14" rx="2"/><circle cx="12" cy="14" r="3"/></svg>Efectivo
         </button>
         <button type="button" class="method-btn" id="mb-transferencia" onclick="setPagoForma('transferencia')">
-          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-          Transferencia
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Transferencia
         </button>
         <button type="button" class="method-btn" id="mb-mixto" onclick="setPagoForma('mixto')">
-          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><path d="M16 3h5v5M4 20 20.2 3.8M21 16v5h-5M15 15l5.1 5.1"/></svg>
-          Combinado
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><path d="M16 3h5v5M4 20 20.2 3.8M21 16v5h-5M15 15l5.1 5.1"/></svg>Combinado
         </button>
       </div>
     </div>
     <div id="pago-campos"></div>
     <div id="pago-total-preview" style="display:none" class="cost-breakdown">
-      <div class="cost-row total">
-        <span>Total cobrado</span>
-        <span class="cost-val" id="pago-total-val">$0</span>
-      </div>
+      <div class="cost-row total"><span>Total cobrado</span><span class="cost-val" id="pago-total-val">$0</span></div>
       <div id="pago-comision-row" style="display:none" class="cost-row">
         <span class="cost-label text-danger">Comisión manicurista</span>
         <span id="pago-comision-val" class="text-danger"></span>
@@ -980,27 +1160,45 @@ window.openNuevoPago = function () {
   </div>
   <div class="modal-footer">
     <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-    <button class="btn btn-primary" onclick="savePago()">Confirmar pago</button>
+    <button class="btn btn-primary" onclick="savePago()">Confirmar cobro</button>
   </div>`);
   renderPagoCampos();
 };
 
 window.onPagoSvcChange = function (val) {
-  const row = document.getElementById('ps-row');
   if (val) {
     const s = servicios.find(x => x.id === val);
     if (s) {
       const c = calcularServicio(s);
-      row.style.display = 'block';
-      document.getElementById('ps-mat').textContent = '$' + fmt(c.costoMateriales);
-      document.getElementById('ps-op').textContent = '$' + fmt(c.costoOperativo);
-      document.getElementById('ps-com').textContent = '$' + fmt(c.comisionMonto);
-      document.getElementById('ps-val').textContent = '$' + fmt(c.precioSugerido);
+      let precio = c.precioSugerido;
+      let descuentoMonto = 0;
+      if (s.descuento && s.descuento > 0) {
+        descuentoMonto = precio * (s.descuento / 100);
+        precio = precio - descuentoMonto;
+      }
+      pagoTotalFijo = Math.round(precio);
+      const comReal = pagoTotalFijo * ((config.comisionPct || 0) / 100);
+      const netReal = pagoTotalFijo - c.costoMateriales - c.costoOperativo - comReal;
+      document.getElementById('pago-precio-area').innerHTML = `
+        <div class="cost-breakdown mb-3">
+          <div class="cost-section-label">Precio del servicio</div>
+          <div class="cost-row"><span class="cost-label">Materiales</span><span>$${fmt(c.costoMateriales)}</span></div>
+          <div class="cost-row"><span class="cost-label">Operativo</span><span>$${fmt(c.costoOperativo)}</span></div>
+          ${config.comisionPct > 0 ? `<div class="cost-row"><span class="cost-label text-danger">Comisión manicurista (${config.comisionPct}%)</span><span class="text-danger">$${fmt(comReal)}</span></div>` : ''}
+          ${s.descuento ? `<div class="cost-row"><span class="cost-label text-warn">Descuento (${s.descuento}%)</span><span class="text-warn">— $${fmt(descuentoMonto)}</span></div>` : ''}
+          ${config.comisionPct > 0 ? `<div class="cost-row"><span class="cost-label text-success">Ganancia studio</span><span class="text-success font-medium">$${fmt(netReal)}</span></div>` : ''}
+          <div class="cost-row total"><span>A cobrar</span><span class="cost-val">$${fmt(pagoTotalFijo)}</span></div>
+        </div>`;
     }
   } else {
-    row.style.display = 'none';
+    pagoTotalFijo = 0;
+    document.getElementById('pago-precio-area').innerHTML = `
+      <div class="form-group">
+        <label class="form-label">Monto a cobrar ($) *</label>
+        <input class="form-input" type="number" id="pago-monto-manual" placeholder="0" oninput="updatePagoPreview()">
+      </div>`;
   }
-  updatePagoPreview();
+  renderPagoCampos();
 };
 
 window.setPagoForma = function (f) {
@@ -1014,34 +1212,73 @@ window.setPagoForma = function (f) {
 function renderPagoCampos() {
   const el = document.getElementById('pago-campos');
   if (!el) return;
-  if (pagoForma === 'efectivo') {
-    el.innerHTML = `<div class="form-group"><label class="form-label">Monto efectivo ($) *</label><input class="form-input" type="number" id="pago-ef" placeholder="0" oninput="updatePagoPreview()"></div>`;
-  } else if (pagoForma === 'transferencia') {
-    el.innerHTML = `<div class="form-group"><label class="form-label">Monto transferencia ($) *</label><input class="form-input" type="number" id="pago-tr" placeholder="0" oninput="updatePagoPreview()"></div>`;
+  if (pagoTotalFijo > 0) {
+    if (pagoForma === 'mixto') {
+      el.innerHTML = `
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Efectivo ($)</label>
+            <input class="form-input" type="number" id="pago-ef" placeholder="0" oninput="updateSplitMixto()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Transferencia ($)</label>
+            <input class="form-input" type="number" id="pago-tr" placeholder="Auto" readonly style="background:var(--bg2)">
+            <div class="form-hint">Calculado automáticamente</div>
+          </div>
+        </div>`;
+    } else {
+      const icon = pagoForma === 'efectivo' ? '💵' : '📱';
+      el.innerHTML = `<div class="calc-display">${icon} Total ${pagoForma === 'efectivo' ? 'en efectivo' : 'por transferencia'}: <strong>$${fmt(pagoTotalFijo)}</strong></div>`;
+    }
   } else {
-    el.innerHTML = `<div class="form-row">
-      <div class="form-group"><label class="form-label">Efectivo ($)</label><input class="form-input" type="number" id="pago-ef" placeholder="0" oninput="updatePagoPreview()"></div>
-      <div class="form-group"><label class="form-label">Transferencia ($)</label><input class="form-input" type="number" id="pago-tr" placeholder="0" oninput="updatePagoPreview()"></div>
-    </div>`;
+    if (pagoForma === 'efectivo') {
+      el.innerHTML = `<div class="form-group"><label class="form-label">Monto efectivo ($) *</label><input class="form-input" type="number" id="pago-ef" placeholder="0" oninput="updatePagoPreview()"></div>`;
+    } else if (pagoForma === 'transferencia') {
+      el.innerHTML = `<div class="form-group"><label class="form-label">Monto transferencia ($) *</label><input class="form-input" type="number" id="pago-tr" placeholder="0" oninput="updatePagoPreview()"></div>`;
+    } else {
+      el.innerHTML = `<div class="form-row">
+        <div class="form-group"><label class="form-label">Efectivo ($)</label><input class="form-input" type="number" id="pago-ef" placeholder="0" oninput="updatePagoPreview()"></div>
+        <div class="form-group"><label class="form-label">Transferencia ($)</label><input class="form-input" type="number" id="pago-tr" placeholder="0" oninput="updatePagoPreview()"></div>
+      </div>`;
+    }
   }
   updatePagoPreview();
 }
 
-window.updatePagoPreview = function () {
+window.updateSplitMixto = function () {
   const ef = parseFloat(document.getElementById('pago-ef')?.value) || 0;
-  const tr = parseFloat(document.getElementById('pago-tr')?.value) || 0;
-  const total = ef + tr;
+  const tr = Math.max(0, pagoTotalFijo - ef);
+  const trEl = document.getElementById('pago-tr');
+  if (trEl) trEl.value = tr > 0 ? tr : '';
+  updatePagoPreview();
+};
+
+window.updatePagoPreview = function () {
+  let ef = 0, tr = 0, total = 0;
+  if (pagoTotalFijo > 0) {
+    total = pagoTotalFijo;
+    if (pagoForma === 'efectivo')      { ef = total; }
+    else if (pagoForma === 'transferencia') { tr = total; }
+    else { ef = parseFloat(document.getElementById('pago-ef')?.value) || 0; tr = total - ef; }
+  } else {
+    ef = parseFloat(document.getElementById('pago-ef')?.value) || 0;
+    tr = parseFloat(document.getElementById('pago-tr')?.value) || 0;
+    const manual = parseFloat(document.getElementById('pago-monto-manual')?.value) || 0;
+    if (pagoForma === 'efectivo')      { ef = ef || manual; total = ef; }
+    else if (pagoForma === 'transferencia') { tr = tr || manual; total = tr; }
+    else { total = ef + tr; }
+  }
   const preview = document.getElementById('pago-total-preview');
+  if (!preview) return;
   if (total > 0) {
     preview.style.display = 'block';
     document.getElementById('pago-total-val').textContent = '$' + fmt(total);
     if (config.comisionPct > 0) {
-      const { comisionMonto } = calcularConPrecioReal(total);
-      const gananciaNeta = total - comisionMonto;
+      const com = total * (config.comisionPct / 100);
       document.getElementById('pago-comision-row').style.display = 'flex';
       document.getElementById('pago-neto-row').style.display = 'flex';
-      document.getElementById('pago-comision-val').textContent = '— $' + fmt(comisionMonto);
-      document.getElementById('pago-neto-val').textContent = '$' + fmt(gananciaNeta);
+      document.getElementById('pago-comision-val').textContent = '— $' + fmt(com);
+      document.getElementById('pago-neto-val').textContent = '$' + fmt(total - com);
     }
   } else {
     preview.style.display = 'none';
@@ -1049,109 +1286,77 @@ window.updatePagoPreview = function () {
 };
 
 window.savePago = async function () {
-  const ef = parseFloat(document.getElementById('pago-ef')?.value) || 0;
-  const tr = parseFloat(document.getElementById('pago-tr')?.value) || 0;
-  const total = ef + tr;
-  if (!total) { toast('Ingresá el monto', 'error'); return; }
+  let ef = 0, tr = 0, total = 0;
+  if (pagoTotalFijo > 0) {
+    total = pagoTotalFijo;
+    if (pagoForma === 'efectivo')      { ef = total; }
+    else if (pagoForma === 'transferencia') { tr = total; }
+    else {
+      ef = parseFloat(document.getElementById('pago-ef')?.value) || 0;
+      tr = Math.max(0, total - ef);
+      if (ef < 0 || ef > total) { toast('El efectivo no puede superar el total', 'error'); return; }
+    }
+  } else {
+    if (pagoForma === 'efectivo') {
+      ef = parseFloat(document.getElementById('pago-ef')?.value) || parseFloat(document.getElementById('pago-monto-manual')?.value) || 0;
+    } else if (pagoForma === 'transferencia') {
+      tr = parseFloat(document.getElementById('pago-tr')?.value) || parseFloat(document.getElementById('pago-monto-manual')?.value) || 0;
+    } else {
+      ef = parseFloat(document.getElementById('pago-ef')?.value) || 0;
+      tr = parseFloat(document.getElementById('pago-tr')?.value) || 0;
+    }
+    total = ef + tr;
+    if (!total) { toast('Ingresá el monto a cobrar', 'error'); return; }
+  }
 
   const svcId = document.getElementById('pago-svc').value;
-  const svc = servicios.find(s => s.id === svcId);
-  const calc = svc ? calcularServicio(svc) : { costoMateriales: 0, costoOperativo: 0, comisionMonto: 0, gananciaNeta: total };
-  
-  // Si es manual (sin servicio), calcular solo comisión
-  const comisionMonto = config.comisionPct > 0 ? total * (config.comisionPct / 100) : 0;
-  const gananciaNeta = svc ? calc.gananciaNeta : total - comisionMonto;
+  const svc   = servicios.find(s => s.id === svcId);
+  const calc  = svc ? calcularServicio(svc) : null;
+  const comisionMonto = (config.comisionPct || 0) > 0 ? total * (config.comisionPct / 100) : 0;
+  const gananciaNeta  = calc
+    ? total - (calc.costoMateriales || 0) - (calc.costoOperativo || 0) - comisionMonto
+    : total - comisionMonto;
 
   const obj = {
     id: uid(),
-    servicioId: svcId || null,
+    servicioId:    svcId || null,
     servicioNombre: svc?.nombre || 'Manual',
     clienteNombre: document.getElementById('pago-cliente').value.trim(),
-    fecha: document.getElementById('pago-fecha').value || new Date().toISOString(),
-    forma: pagoForma,
-    efectivo: ef || null,
+    fecha:  document.getElementById('pago-fecha').value || new Date().toISOString(),
+    forma:  pagoForma,
+    efectivo:      ef || null,
     transferencia: tr || null,
     total,
-    costoMateriales: calc.costoMateriales || 0,
-    costoOperativo: calc.costoOperativo || 0,
+    costoMateriales: calc?.costoMateriales || 0,
+    costoOperativo:  calc?.costoOperativo  || 0,
     comisionMonto,
     gananciaNeta
   };
 
   await saveDoc('pagos', obj);
   pagos.push(obj);
-
-  // Actualizar saldo en caja
   if (ef > 0) config.saldoEfectivo = (config.saldoEfectivo || 0) + ef;
-  if (tr > 0) config.saldoCuenta = (config.saldoCuenta || 0) + tr;
+  if (tr > 0) config.saldoCuenta   = (config.saldoCuenta   || 0) + tr;
   await saveConfig();
-
   closeModal();
+  cajaTab = 'pagos';
   renderCaja();
-  toast('Pago registrado');
+  toast('Cobro registrado');
 };
 
 window.deletePago = async function (id) {
-  if (!confirm('¿Eliminar este registro?')) return;
+  if (!confirm('¿Eliminar este cobro?')) return;
   const pago = pagos.find(p => p.id === id);
   if (pago) {
-    if (pago.efectivo) config.saldoEfectivo = Math.max(0, (config.saldoEfectivo || 0) - pago.efectivo);
-    if (pago.transferencia) config.saldoCuenta = Math.max(0, (config.saldoCuenta || 0) - pago.transferencia);
+    if (pago.efectivo)      config.saldoEfectivo = Math.max(0, (config.saldoEfectivo || 0) - pago.efectivo);
+    if (pago.transferencia) config.saldoCuenta   = Math.max(0, (config.saldoCuenta   || 0) - pago.transferencia);
     await saveConfig();
   }
   await deleteFireDoc('pagos', id);
   pagos = pagos.filter(p => p.id !== id);
   renderCaja();
-  toast('Registro eliminado');
+  toast('Cobro eliminado');
 };
-
-// ════════════════════════════════════════════════════════════
-//  MOVIMIENTOS — NUEVO MÓDULO
-// ════════════════════════════════════════════════════════════
-function renderMovimientos() {
-  document.getElementById('topbarActions').innerHTML = `
-    <button class="btn btn-primary" onclick="openNuevoMovimiento()">${iconPlus()} Nuevo movimiento</button>`;
-
-  const filtrados = movimientos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-  const compras = filtrados.filter(m => m.tipo === 'compra').reduce((a, m) => a + m.monto, 0);
-  const gastos = filtrados.filter(m => m.tipo === 'gasto').reduce((a, m) => a + m.monto, 0);
-  const transfers = filtrados.filter(m => m.tipo === 'transfer');
-
-  document.getElementById('mainContent').innerHTML = `
-  <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
-    <div class="stat-card"><div class="stat-label">Total compras insumos</div><div class="stat-value stat-down">— $${fmt(compras)}</div></div>
-    <div class="stat-card"><div class="stat-label">Total gastos</div><div class="stat-value stat-down">— $${fmt(gastos)}</div></div>
-  </div>
-  <div class="card">
-    <div style="margin-bottom: 16px;">
-      <button class="btn btn-secondary btn-sm" onclick="openNuevoMovimiento('compra')">Compra de insumos</button>
-      <button class="btn btn-secondary btn-sm" onclick="openNuevoMovimiento('gasto')">Gasto operativo</button>
-      <button class="btn btn-secondary btn-sm" onclick="openNuevoMovimiento('transfer')">Transferencia interna</button>
-    </div>
-    ${filtrados.length === 0
-      ? `<div class="empty"><h3>Sin movimientos</h3><p>Registrá compras, gastos o transferencias</p></div>`
-      : `<div class="table-wrap"><table>
-          <thead><tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Monto</th><th>Notas</th><th></th></tr></thead>
-          <tbody>
-            ${filtrados.map(m => {
-              let icono = '💰', color = 'text-muted';
-              if (m.tipo === 'compra') { icono = '📦'; color = 'text-danger'; }
-              else if (m.tipo === 'gasto') { icono = '🔌'; color = 'text-danger'; }
-              else if (m.tipo === 'transfer') { icono = '↔️'; }
-              return `<tr>
-                <td class="td-muted text-sm">${new Date(m.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}</td>
-                <td><span class="badge ${color === 'text-danger' ? 'badge-danger' : 'badge-neutral'}">${icono} ${m.tipo}</span></td>
-                <td class="font-medium">${m.descripcion}</td>
-                <td class="td-num font-medium ${color}">— $${fmt(m.monto)}</td>
-                <td class="td-muted text-sm">${m.notas || '—'}</td>
-                <td><button class="btn btn-danger btn-sm" onclick="deleteMovimiento('${m.id}')">${iconTrash()}</button></td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table></div>`
-    }
-  </div>`;
-}
 
 window.openNuevoMovimiento = function (tipo) {
   openModal(`
@@ -1248,7 +1453,7 @@ window.saveMovimiento = async function (tipoFijo) {
   await saveConfig();
   movimientos.push(obj);
   closeModal();
-  renderMovimientos();
+  renderCaja();
   toast('Movimiento registrado');
 };
 
@@ -1265,131 +1470,191 @@ window.deleteMovimiento = async function (id) {
   }
   await deleteFireDoc('movimientos', id);
   movimientos = movimientos.filter(m => m.id !== id);
-  renderMovimientos();
+  renderCaja();
   toast('Movimiento eliminado');
 };
 
 // ════════════════════════════════════════════════════════════
-//  ARQUEO
-// ════════════════════════════════════════════════════════════
-function renderArqueo() {
-  document.getElementById('topbarActions').innerHTML = `
-    <button class="btn btn-secondary" onclick="exportarJSON()">${iconDownload()} Exportar JSON</button>`;
-
-  const mes = new Date().getMonth();
-  const anio = new Date().getFullYear();
-
-  const mesPagos = pagos.filter(p => {
-    const d = new Date(p.fecha);
-    return d.getMonth() === mes && d.getFullYear() === anio;
-  });
-
-  const totalIngresos = mesPagos.reduce((a, p) => a + p.total, 0);
-  const efMes = mesPagos.reduce((a, p) => a + (p.efectivo || 0), 0);
-  const trMes = mesPagos.reduce((a, p) => a + (p.transferencia || 0), 0);
-
-  const comisionMes = mesPagos.reduce((a, p) => a + (p.comisionMonto || 0), 0);
-  const gananciaNetaMes = mesPagos.reduce((a, p) => a + (p.gananciaNeta || 0), 0);
-
-  const mesMov = movimientos.filter(m => {
-    const d = new Date(m.fecha);
-    return d.getMonth() === mes && d.getFullYear() === anio;
-  });
-
-  const comprasMes = mesMov.filter(m => m.tipo === 'compra').reduce((a, m) => a + m.monto, 0);
-  const gastosMes = mesMov.filter(m => m.tipo === 'gasto').reduce((a, m) => a + m.monto, 0);
-  const gastosFijosMes = totalGastosFijosM();
-
-  const egresosTotales = comisionMes + comprasMes + gastosMes + gastosFijosMes;
-  const resultadoFinal = gananciaNetaMes - egresosTotales;
-
-  document.getElementById('mainContent').innerHTML = `
-  <div class="grid-2">
-    <div class="card">
-      <div class="section-title mb-3">Ingresos del mes</div>
-      <div class="cost-breakdown">
-        <div class="cost-row"><span class="cost-label">Efectivo</span><span>$${fmt(efMes)}</span></div>
-        <div class="cost-row"><span class="cost-label">Transferencias</span><span>$${fmt(trMes)}</span></div>
-        <div class="cost-row total"><span class="cost-label">Total facturado</span><span class="cost-val">$${fmt(totalIngresos)}</span></div>
-      </div>
-      <div class="mt-3">
-        <div class="text-sm font-medium mb-2">Balance de caja actual</div>
-        <div class="ingredient-row mb-2">
-          <div class="flex1">Efectivo en caja</div>
-          <div class="cost-tag font-medium">$${fmt(config.saldoEfectivo || 0)}</div>
-        </div>
-        <div class="ingredient-row">
-          <div class="flex1">Saldo en cuenta</div>
-          <div class="cost-tag font-medium">$${fmt(config.saldoCuenta || 0)}</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="section-title mb-3">Egresos del mes</div>
-      <div class="cost-breakdown">
-        <div class="cost-section-label">Distribución</div>
-        ${config.comisionPct > 0 ? `<div class="cost-row"><span class="cost-label">Comisión manicurista (${config.comisionPct}%)</span><span class="text-danger">— $${fmt(comisionMes)}</span></div>` : ''}
-        <div class="cost-row"><span class="cost-label">Compra de insumos</span><span class="text-danger">— $${fmt(comprasMes)}</span></div>
-        <div class="cost-row"><span class="cost-label">Gastos operativos varios</span><span class="text-danger">— $${fmt(gastosMes)}</span></div>
-        <div class="cost-row"><span class="cost-label">Gastos fijos mensuales</span><span class="text-danger">— $${fmt(gastosFijosMes)}</span></div>
-        <div class="cost-row total"><span class="cost-label">Total egresos</span><span class="cost-val" style="color:var(--danger)">— $${fmt(egresosTotales)}</span></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="card mt-4">
-    <div class="section-title mb-3">Resultado final del mes</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-      <div style="background:var(--success-bg);border-radius:var(--border-radius);padding:1rem;border-left:3px solid var(--success)">
-        <div class="text-xs text-success font-medium mb-2">INGRESOS</div>
-        <div style="font-size:24px;font-weight:500;color:var(--success)">+$${fmt(totalIngresos)}</div>
-      </div>
-      <div style="background:var(--danger-bg);border-radius:var(--border-radius);padding:1rem;border-left:3px solid var(--danger)">
-        <div class="text-xs text-danger font-medium mb-2">EGRESOS</div>
-        <div style="font-size:24px;font-weight:500;color:var(--danger)">— $${fmt(egresosTotales)}</div>
-      </div>
-    </div>
-    <div style="background:${resultadoFinal >= 0 ? 'var(--success-bg)' : 'var(--danger-bg)'};border-radius:var(--border-radius);padding:1.5rem;margin-top:16px;border-left:4px solid ${resultadoFinal >= 0 ? 'var(--success)' : 'var(--danger)'}">
-      <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:${resultadoFinal >= 0 ? 'var(--success)' : 'var(--danger)'};margin-bottom:8px;font-weight:500">Resultado neto</div>
-      <div style="font-size:32px;font-weight:500;color:${resultadoFinal >= 0 ? 'var(--success)' : 'var(--danger)'}">${resultadoFinal >= 0 ? '+' : '— '}$${fmt(Math.abs(resultadoFinal))}</div>
-      <div style="font-size:13px;color:${resultadoFinal >= 0 ? 'var(--success)' : 'var(--danger)'};margin-top:4px">${resultadoFinal >= 0 ? '✓ Ganancia' : '✗ Pérdida'}</div>
-    </div>
-  </div>`;
-}
-
-// ════════════════════════════════════════════════════════════
-//  ESTADÍSTICAS (mejoradas)
+//  ESTADÍSTICAS
 // ════════════════════════════════════════════════════════════
 function renderEstadisticas() {
+  const hoy = new Date();
+  const mesAct = hoy.getMonth(), anioAct = hoy.getFullYear();
+
+  // ── Datos del mes actual ──────────────────────────────────
+  const pagosMes = pagos.filter(p => {
+    const d = new Date(p.fecha);
+    return d.getMonth() === mesAct && d.getFullYear() === anioAct;
+  });
+  const totalMes    = pagosMes.reduce((a, p) => a + p.total, 0);
+  const comisionMes = pagosMes.reduce((a, p) => a + (p.comisionMonto || 0), 0);
+  const netaMes     = pagosMes.reduce((a, p) => a + (p.gananciaNeta || 0), 0);
+  const efMes       = pagosMes.reduce((a, p) => a + (p.efectivo || 0), 0);
+  const trMes       = pagosMes.reduce((a, p) => a + (p.transferencia || 0), 0);
+  const ticketMes   = pagosMes.length ? totalMes / pagosMes.length : 0;
+
+  const movMes = movimientos.filter(m => {
+    const d = new Date(m.fecha);
+    return d.getMonth() === mesAct && d.getFullYear() === anioAct;
+  });
+  const comprasMes  = movMes.filter(m => m.tipo === 'compra').reduce((a, m) => a + m.monto, 0);
+  const gastosMes   = movMes.filter(m => m.tipo === 'gasto').reduce((a, m) => a + m.monto, 0);
+  const gastosFijosTotal = totalGastosFijosM();
+  const egresosMes  = comisionMes + comprasMes + gastosMes + gastosFijosTotal;
+  const resultadoMes = netaMes - egresosMes;
+  const mesLabel = hoy.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+
+  // ── Últimos 6 meses para gráfico ─────────────────────────
   const meses = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
     const m = d.getMonth(), a = d.getFullYear();
     const ps = pagos.filter(p => { const pd = new Date(p.fecha); return pd.getMonth() === m && pd.getFullYear() === a; });
-    const total = ps.reduce((s, p) => s + p.total, 0);
-    const comision = ps.reduce((s, p) => s + (p.comisionMonto || 0), 0);
-    const ganancia = ps.reduce((s, p) => s + (p.gananciaNeta || 0), 0);
     meses.push({
       label: d.toLocaleDateString('es-AR', { month: 'short' }),
-      total, comision, ganancia, count: ps.length
+      total: ps.reduce((s, p) => s + p.total, 0),
+      ganancia: ps.reduce((s, p) => s + (p.gananciaNeta || 0), 0),
+      count: ps.length
     });
   }
   const maxTotal = Math.max(...meses.map(m => m.total), 1);
 
-  const servicioCount = {};
-  pagos.forEach(p => { if (p.servicioNombre) servicioCount[p.servicioNombre] = (servicioCount[p.servicioNombre] || 0) + 1; });
-  const top5 = Object.entries(servicioCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  // ── Servicios más realizados (mes actual) ─────────────────
+  const svcCount = {};
+  pagosMes.forEach(p => { if (p.servicioNombre) svcCount[p.servicioNombre] = (svcCount[p.servicioNombre] || 0) + 1; });
+  const top5 = Object.entries(svcCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const maxCount = Math.max(...top5.map(x => x[1]), 1);
 
-  const ef = pagos.reduce((a, p) => a + (p.efectivo || 0), 0);
-  const tr = pagos.reduce((a, p) => a + (p.transferencia || 0), 0);
-  const gt = ef + tr;
-  const efPct = gt > 0 ? Math.round((ef / gt) * 100) : 0;
-  const trPct = gt > 0 ? Math.round((tr / gt) * 100) : 0;
+  // ── Distribución de pagos (mes actual) ───────────────────
+  const gt = efMes + trMes;
+  const efPct = gt > 0 ? Math.round((efMes / gt) * 100) : 0;
+  const trPct = gt > 0 ? Math.round((trMes / gt) * 100) : 0;
+
+  // ── Objetivos del mes ─────────────────────────────────────
+  let avgContrib = 0;
+  if (pagosMes.length > 0) {
+    avgContrib = pagosMes.reduce((a, p) => a + (p.gananciaNeta || 0) + (p.costoOperativo || 0), 0) / pagosMes.length;
+  } else if (servicios.length > 0) {
+    avgContrib = servicios.reduce((a, s) => {
+      const c = calcularServicio(s); return a + c.gananciaNeta + c.costoOperativo;
+    }, 0) / servicios.length;
+  }
+  const breakEvenCount = (avgContrib > 0 && gastosFijosTotal > 0) ? Math.ceil(gastosFijosTotal / avgContrib) : 0;
+  const breakEvenRest  = Math.max(0, breakEvenCount - pagosMes.length);
+  const beAlcanzado    = breakEvenCount > 0 && pagosMes.length >= breakEvenCount;
+  const bePct          = breakEvenCount > 0 ? Math.min(100, Math.round((pagosMes.length / breakEvenCount) * 100)) : 0;
+
+  const salObj   = config.salarioObjetivoManicurista || 0;
+  const salActual = comisionMes;
+  let turnosNec = 0, turnosRest = 0;
+  if (salObj > 0 && config.comisionPct > 0) {
+    let avgCom = 0;
+    if (pagosMes.length > 0) avgCom = salActual / pagosMes.length;
+    else if (servicios.length > 0) avgCom = servicios.reduce((a, s) => a + calcularServicio(s).comisionMonto, 0) / servicios.length;
+    turnosNec  = avgCom > 0 ? Math.ceil(salObj / avgCom) : 0;
+    turnosRest = Math.max(0, turnosNec - pagosMes.length);
+  }
+  const salPct = salObj > 0 ? Math.min(100, Math.round((salActual / salObj) * 100)) : 0;
+
+  const metaSvc   = config.serviciosMes || 0;
+  const svcRest   = Math.max(0, metaSvc - pagosMes.length);
+  const metaPct   = metaSvc > 0 ? Math.min(100, Math.round((pagosMes.length / metaSvc) * 100)) : 0;
+
+  function progBar(pct, color) {
+    return `<div style="height:5px;background:var(--border);border-radius:3px;margin-top:6px">
+      <div style="height:5px;background:${color};border-radius:3px;width:${pct}%;transition:width .3s"></div>
+    </div>`;
+  }
+  const objCard = 'background:var(--bg2);border-radius:var(--radius);padding:14px;display:flex;flex-direction:column;gap:5px';
 
   document.getElementById('mainContent').innerHTML = `
-  <div class="grid-2">
+
+  <!-- Resumen del mes -->
+  <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
+    <div class="stat-card"><div class="stat-label">Ingresos ${mesLabel}</div><div class="stat-value">$${fmt(totalMes)}</div><div class="stat-sub">${pagosMes.length} cobros</div></div>
+    <div class="stat-card"><div class="stat-label">Ganancia studio</div><div class="stat-value stat-up">$${fmt(netaMes)}</div><div class="stat-sub">antes de egresos fijos</div></div>
+    <div class="stat-card"><div class="stat-label">Comisión manicurista</div><div class="stat-value stat-down">$${fmt(comisionMes)}</div><div class="stat-sub">${config.comisionPct}% del cobrado</div></div>
+    <div class="stat-card"><div class="stat-label">Egresos del mes</div><div class="stat-value stat-down">$${fmt(egresosMes)}</div><div class="stat-sub">gastos + comisiones</div></div>
+    <div class="stat-card"><div class="stat-label">Resultado neto</div><div class="stat-value ${resultadoMes >= 0 ? 'stat-up' : 'stat-down'}">$${fmt(resultadoMes)}</div><div class="stat-sub">${resultadoMes >= 0 ? 'Ganancia' : 'Pérdida'}</div></div>
+    <div class="stat-card"><div class="stat-label">Ticket promedio</div><div class="stat-value">$${fmt(ticketMes)}</div><div class="stat-sub">este mes</div></div>
+  </div>
+
+  <!-- Objetivos del mes -->
+  <div class="card mt-4">
+    <div class="section-header" style="margin-bottom:14px">
+      <div class="section-title">Objetivos del mes — ${mesLabel}</div>
+      <button class="btn btn-ghost btn-sm" onclick="navigate('config')">Configurar →</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+
+      <!-- Punto de equilibrio -->
+      <div style="${objCard}">
+        <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3)">Punto de equilibrio</div>
+        ${gastosFijosTotal === 0
+          ? `<div style="font-size:13px;color:var(--text3)">Sin gastos fijos configurados</div>`
+          : breakEvenCount === 0
+          ? `<div style="font-size:13px;color:var(--text3)">Sin servicios para calcular</div>`
+          : beAlcanzado
+          ? `<div style="font-size:20px;font-weight:500;color:var(--success)">✓ Cubierto</div>
+             <div style="font-size:12px;color:var(--text3)">${pagosMes.length} cobros — gastos fijos cubiertos</div>
+             ${progBar(100, 'var(--success)')}`
+          : `<div style="font-size:20px;font-weight:500;color:var(--warn)">${breakEvenRest} turno${breakEvenRest !== 1 ? 's' : ''} más</div>
+             <div style="font-size:12px;color:var(--text3)">${pagosMes.length} / ${breakEvenCount} cobros · $${fmt(gastosFijosTotal)} gastos fijos</div>
+             ${progBar(bePct, 'var(--accent)')}`
+        }
+        ${gastosFijosTotal > 0 ? `<div style="font-size:11px;color:var(--text3);margin-top:4px">Contribución promedio: $${fmt(avgContrib)}/turno</div>` : ''}
+      </div>
+
+      <!-- Salario manicurista -->
+      <div style="${objCard}">
+        <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3)">Salario manicurista</div>
+        ${config.comisionPct === 0
+          ? `<div style="font-size:13px;color:var(--text3)">Configurá la comisión primero</div>`
+          : salObj === 0
+          ? `<div style="font-size:13px;color:var(--text3)">Sin objetivo configurado</div>`
+          : turnosNec === 0
+          ? `<div style="font-size:13px;color:var(--text3)">Sin datos suficientes</div>`
+          : salActual >= salObj
+          ? `<div style="font-size:20px;font-weight:500;color:var(--success)">✓ Meta alcanzada</div>
+             <div style="font-size:12px;color:var(--text3)">$${fmt(salActual)} / $${fmt(salObj)}</div>
+             ${progBar(100, 'var(--success)')}`
+          : `<div style="font-size:20px;font-weight:500;color:var(--accent)">${turnosRest} turno${turnosRest !== 1 ? 's' : ''} más</div>
+             <div style="font-size:12px;color:var(--text3)">$${fmt(salActual)} de $${fmt(salObj)} objetivo · ${salPct}%</div>
+             ${progBar(salPct, 'var(--accent)')}`
+        }
+        ${config.comisionPct > 0 && salObj > 0 && turnosNec > 0
+          ? `<div style="font-size:11px;color:var(--text3);margin-top:4px">Necesitás ${turnosNec} cobros totales este mes</div>` : ''}
+      </div>
+
+      <!-- Meta de servicios -->
+      <div style="${objCard}">
+        <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3)">Meta de servicios</div>
+        <div style="font-size:20px;font-weight:500;color:var(--text)">${pagosMes.length} <span style="font-size:14px;color:var(--text3);font-weight:400">/ ${metaSvc}</span></div>
+        <div style="font-size:12px;color:var(--text3)">${svcRest > 0 ? svcRest + ' servicio' + (svcRest !== 1 ? 's' : '') + ' restantes' : '✓ Meta alcanzada'} · ${metaPct}%</div>
+        ${progBar(metaPct, metaPct >= 100 ? 'var(--success)' : 'var(--accent)')}
+      </div>
+
+      <!-- Distribución de ingresos -->
+      <div style="${objCard}">
+        <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3)">Distribución del mes</div>
+        ${totalMes === 0
+          ? `<div style="font-size:13px;color:var(--text3)">Sin cobros este mes</div>`
+          : `<div style="font-size:12px;color:var(--text3)">Efectivo: <strong>$${fmt(efMes)}</strong> (${efPct}%)</div>
+             <div style="font-size:12px;color:var(--text3)">Transfer.: <strong>$${fmt(trMes)}</strong> (${trPct}%)</div>
+             <div style="height:5px;background:var(--border);border-radius:3px;margin-top:6px;overflow:hidden">
+               <div style="height:5px;display:flex">
+                 <div style="width:${efPct}%;background:var(--accent)"></div>
+                 <div style="width:${trPct}%;background:var(--info)"></div>
+               </div>
+             </div>`
+        }
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Gráficos -->
+  <div class="grid-2 mt-4">
     <div class="card">
       <div class="section-title mb-4">Ingresos últimos 6 meses</div>
       <div class="bar-group">
@@ -1401,11 +1666,17 @@ function renderEstadisticas() {
             <div class="bar-label">${m.label}</div>
           </div>`).join('')}
       </div>
+      <div class="divider" style="margin-top:14px"></div>
+      <div class="cost-breakdown" style="margin-top:10px">
+        <div class="cost-row"><span class="cost-label">Costo operativo/servicio</span><span>$${fmt(costoOperativoPorServicio())}</span></div>
+        <div class="cost-row"><span class="cost-label">Ticket promedio este mes</span><span class="font-medium">$${fmt(ticketMes)}</span></div>
+        <div class="cost-row"><span class="cost-label">Gastos fijos mensuales</span><span>$${fmt(gastosFijosTotal)}</span></div>
+      </div>
     </div>
     <div class="card">
-      <div class="section-title mb-3">Servicios más realizados</div>
+      <div class="section-title mb-3">Servicios del mes — ranking</div>
       ${top5.length === 0
-        ? `<p class="text-sm text-hint">Sin datos suficientes</p>`
+        ? `<p class="text-sm text-hint">Sin cobros registrados este mes</p>`
         : top5.map(([nom, cnt]) => `
           <div style="margin-bottom:10px">
             <div class="flex justify-between text-sm mb-1"><span>${nom}</span><span class="font-medium">${cnt}×</span></div>
@@ -1414,40 +1685,6 @@ function renderEstadisticas() {
             </div>
           </div>`).join('')
       }
-    </div>
-  </div>
-
-  <div class="grid-2 mt-4">
-    <div class="card">
-      <div class="section-title mb-3">Distribución de pagos</div>
-      <div class="ring-wrap">
-        <svg width="90" height="90" viewBox="0 0 36 36" style="transform:rotate(-90deg);flex-shrink:0">
-          <circle cx="18" cy="18" r="14" fill="none" stroke="var(--bg2)" stroke-width="4"/>
-          ${gt > 0 ? `
-          <circle cx="18" cy="18" r="14" fill="none" stroke="var(--accent)" stroke-width="4"
-            stroke-dasharray="${efPct} ${100 - efPct}" stroke-dashoffset="0"/>
-          <circle cx="18" cy="18" r="14" fill="none" stroke="var(--info)" stroke-width="4"
-            stroke-dasharray="${trPct} ${100 - trPct}"
-            stroke-dashoffset="${-efPct}"/>` : ''}
-        </svg>
-        <div class="ring-legend">
-          <div class="ring-legend-item"><div class="ring-dot" style="background:var(--accent)"></div><div>Efectivo ${efPct}% — $${fmt(ef)}</div></div>
-          <div class="ring-legend-item"><div class="ring-dot" style="background:var(--info)"></div><div>Transfer. ${trPct}% — $${fmt(tr)}</div></div>
-        </div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="section-title mb-3">Métricas</div>
-      <div class="stats-grid" style="grid-template-columns:1fr 1fr">
-        <div class="stat-card"><div class="stat-label">Insumos</div><div class="stat-value">${insumos.length}</div></div>
-        <div class="stat-card"><div class="stat-label">Servicios</div><div class="stat-value">${servicios.length}</div></div>
-        <div class="stat-card"><div class="stat-label">Pagos totales</div><div class="stat-value">${pagos.length}</div></div>
-        <div class="stat-card"><div class="stat-label">Gastos fijos</div><div class="stat-value">${gastosFijos.length}</div></div>
-      </div>
-      <div class="cost-breakdown mt-3">
-        <div class="cost-row"><span class="cost-label">Costo operativo/servicio</span><span>$${fmt(costoOperativoPorServicio())}</span></div>
-        <div class="cost-row"><span class="cost-label">Ticket promedio</span><span>$${fmt(pagos.length ? pagos.reduce((a, p) => a + p.total, 0) / pagos.length : 0)}</span></div>
-      </div>
     </div>
   </div>`;
 }
@@ -1530,6 +1767,19 @@ function renderConfigPage() {
   </div>
 
   <div class="card mt-4">
+    <div class="section-header">
+      <div class="section-title">Categorías de insumos</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input class="form-input" id="nueva-cat-input" placeholder="Nueva categoría…" style="max-width:180px" oninput="">
+        <button class="btn btn-secondary btn-sm" onclick="addCategoria()">${iconPlus()} Agregar</button>
+      </div>
+    </div>
+    <div id="categorias-list" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">
+      ${renderCategoriasConfig()}
+    </div>
+  </div>
+
+  <div class="card mt-4">
     <div class="section-title mb-2">Backup de datos</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-secondary" onclick="exportarJSON()">${iconDownload()} Exportar JSON</button>
@@ -1560,6 +1810,31 @@ function renderGastosFijosList() {
       <button class="btn btn-danger btn-sm" onclick="removeGastoFijo(${i})">${iconTrash()}</button>
     </div>`).join('');
 }
+
+function renderCategoriasConfig() {
+  const cats = config.categorias || [];
+  if (cats.length === 0) return '<p class="text-sm text-hint">Sin categorías. Agregá la primera.</p>';
+  return cats.map((c, i) => `
+    <div style="display:flex;align-items:center;gap:4px;background:var(--bg2);border-radius:var(--radius-sm);padding:4px 8px">
+      <span style="font-size:13px">${c}</span>
+      <button class="btn btn-ghost btn-sm" onclick="removeCategoria(${i})" style="padding:2px 4px;color:var(--text3)">${iconTrash()}</button>
+    </div>`).join('');
+}
+
+window.addCategoria = function () {
+  const input = document.getElementById('nueva-cat-input');
+  const val = input?.value.trim();
+  if (!val) { toast('Escribí el nombre de la categoría', 'error'); return; }
+  if ((config.categorias || []).includes(val)) { toast('Esa categoría ya existe', 'error'); return; }
+  config.categorias = [...(config.categorias || []), val];
+  if (input) input.value = '';
+  document.getElementById('categorias-list').innerHTML = renderCategoriasConfig();
+};
+
+window.removeCategoria = function (i) {
+  config.categorias = (config.categorias || []).filter((_, idx) => idx !== i);
+  document.getElementById('categorias-list').innerHTML = renderCategoriasConfig();
+};
 
 window.setGastoNombre = function (i, val) { gastosFijos[i].nombre = val; };
 window.setGastoMonto = function (i, val) { gastosFijos[i].monto = parseFloat(val) || 0; };
@@ -1649,7 +1924,6 @@ window.navigate = navigate;
 window.toggleSidebar = toggleSidebar;
 window.closeModal = closeModal;
 window.renderIngList = renderIngList;
-window.tempIngredientes = tempIngredientes;
 
 // ── INIT ──────────────────────────────────────────────────
 loadAll();
