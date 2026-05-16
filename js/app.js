@@ -146,16 +146,22 @@ function calcularServicio(servicio) {
 
   const costoOperativo = costoOperativoPorServicio();
   const costoBase = costoMateriales + costoOperativo;
-  const margen = costoBase * (config.margenGanancia / 100);
-  const precioSugerido = costoBase + margen;
+  // Ganancia deseada = lo que el estudio quiere ganar neto, DESPUÉS de pagar la comisión
+  const gananciaDeseada = costoBase * (config.margenGanancia / 100);
+  // Precio = (costos + ganancia deseada) / (1 - % manicurista)
+  // Así el estudio siempre recibe su margen completo sin importar la comisión
+  const comisionFactor = 1 - ((config.comisionPct || 0) / 100);
+  const precioSugerido = comisionFactor > 0
+    ? (costoBase + gananciaDeseada) / comisionFactor
+    : costoBase + gananciaDeseada;
   const comisionMonto = precioSugerido * ((config.comisionPct || 0) / 100);
-  const gananciaNeta = precioSugerido - costoMateriales - costoOperativo - comisionMonto;
+  const gananciaNeta = gananciaDeseada; // = precioSugerido - costoBase - comisionMonto
 
   return {
     costoMateriales,
     costoOperativo,
     costoBase,
-    margen,
+    margen: gananciaDeseada,
     precioSugerido,
     comisionMonto,
     gananciaNeta
