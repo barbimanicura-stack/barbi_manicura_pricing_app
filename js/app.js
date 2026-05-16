@@ -26,7 +26,8 @@ let config   = {
   userName: 'Barbi',
   userRole: 'Administradora',
   saldoEfectivo: 0,
-  saldoCuenta: 0
+  saldoCuenta: 0,
+  salarioObjetivoManicurista: 0
 };
 
 let dbReady = false;
@@ -296,6 +297,51 @@ function renderDashboard() {
   const egresosTotalesMes = comisionMes + totalGastosMes + gastosInsumosMes + otrosGastosMes;
   const resultadoMes = gananciaNetaMes - egresosTotalesMes;
 
+  // ── Objetivos mensuales ──────────────────────────────────────
+  // Punto de equilibrio: servicios para cubrir gastos fijos
+  // Contribution = gananciaNeta + costoOperativo (precio - materiales - comision)
+  let avgContrib = 0;
+  if (pagosMes.length > 0) {
+    avgContrib = pagosMes.reduce((a, p) => a + (p.gananciaNeta || 0) + (p.costoOperativo || 0), 0) / pagosMes.length;
+  } else if (servicios.length > 0) {
+    avgContrib = servicios.reduce((a, s) => {
+      const c = calcularServicio(s);
+      return a + c.gananciaNeta + c.costoOperativo;
+    }, 0) / servicios.length;
+  }
+  const breakEvenCount = (avgContrib > 0 && totalGastosMes > 0) ? Math.ceil(totalGastosMes / avgContrib) : 0;
+  const breakEvenRestantes = Math.max(0, breakEvenCount - pagosMes.length);
+  const breakEvenAlcanzado = breakEvenCount > 0 && pagosMes.length >= breakEvenCount;
+
+  // Salario objetivo manicurista
+  const salarioObj = config.salarioObjetivoManicurista || 0;
+  const salarioActualMes = pagosMes.reduce((a, p) => a + (p.comisionMonto || 0), 0);
+  let turnosNecesarios = 0, turnosRestantes = 0;
+  if (salarioObj > 0 && config.comisionPct > 0) {
+    let avgCom = 0;
+    if (pagosMes.length > 0) {
+      avgCom = salarioActualMes / pagosMes.length;
+    } else if (servicios.length > 0) {
+      avgCom = servicios.reduce((a, s) => a + calcularServicio(s).comisionMonto, 0) / servicios.length;
+    }
+    turnosNecesarios = avgCom > 0 ? Math.ceil(salarioObj / avgCom) : 0;
+    turnosRestantes = Math.max(0, turnosNecesarios - pagosMes.length);
+  }
+  const salarioPct = salarioObj > 0 ? Math.min(100, Math.round((salarioActualMes / salarioObj) * 100)) : 0;
+
+  // Meta de servicios del mes
+  const metaSvc = config.serviciosMes || 0;
+  const svcRestantes = Math.max(0, metaSvc - pagosMes.length);
+  const progPct = metaSvc > 0 ? Math.min(100, Math.round((pagosMes.length / metaSvc) * 100)) : 0;
+
+  const objCardStyle = 'background:var(--bg2);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:6px';
+
+  function progBar(pct, color) {
+    return `<div style="height:5px;background:var(--border);border-radius:3px;margin-top:6px">
+      <div style="height:5px;background:${color};border-radius:3px;width:${pct}%;transition:width .3s"></div>
+    </div>`;
+  }
+
   document.getElementById('mainContent').innerHTML = `
   <div class="stats-grid">
     <div class="stat-card">
@@ -337,6 +383,61 @@ function renderDashboard() {
       <div class="stat-label">Saldo en cuenta</div>
       <div class="stat-value">$${fmt(config.saldoCuenta || 0)}</div>
       <div class="stat-sub">banco</div>
+    </div>
+  </div>
+
+  <div class="card mt-4">
+    <div class="section-header" style="margin-bottom:12px">
+      <div class="section-title">Objetivos del mes</div>
+      <button class="btn btn-ghost btn-sm" onclick="navigate('config')">Configurar →</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px">
+
+      <!-- Punto de equilibrio -->
+      <div style="${objCardStyle}">
+        <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3)">Punto de equilibrio</div>
+        ${totalGastosMes === 0
+          ? `<div style="font-size:13px;color:var(--text3)">Sin gastos fijos configurados</div>`
+          : breakEvenCount === 0
+          ? `<div style="font-size:13px;color:var(--text3)">Sin servicios para calcular</div>`
+          : breakEvenAlcanzado
+          ? `<div style="font-size:20px;font-weight:500;color:var(--success)">✓ Alcanzado</div>
+             <div style="font-size:12px;color:var(--text3)">${pagosMes.length} / ${breakEvenCount} servicios — gastos cubiertos</div>
+             ${progBar(100, 'var(--success)')}`
+          : `<div style="font-size:20px;font-weight:500;color:var(--warn)">${breakEvenRestantes} turno${breakEvenRestantes !== 1 ? 's' : ''}</div>
+             <div style="font-size:12px;color:var(--text3)">${pagosMes.length} / ${breakEvenCount} para cubrir $${fmt(totalGastosMes)} de gastos fijos</div>
+             ${progBar(Math.round((pagosMes.length / breakEvenCount) * 100), 'var(--accent)')}`
+        }
+      </div>
+
+      <!-- Salario manicurista -->
+      <div style="${objCardStyle}">
+        <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3)">Salario manicurista</div>
+        ${config.comisionPct === 0
+          ? `<div style="font-size:13px;color:var(--text3)">Configurá la comisión primero</div>`
+          : salarioObj === 0
+          ? `<div style="font-size:13px;color:var(--text3)">Sin objetivo configurado</div>
+             <div style="font-size:11px;color:var(--text3);margin-top:2px">Ingresalo en Configuración</div>`
+          : turnosNecesarios === 0
+          ? `<div style="font-size:13px;color:var(--text3)">Sin datos suficientes</div>`
+          : salarioActualMes >= salarioObj
+          ? `<div style="font-size:20px;font-weight:500;color:var(--success)">✓ Meta alcanzada</div>
+             <div style="font-size:12px;color:var(--text3)">$${fmt(salarioActualMes)} de $${fmt(salarioObj)}</div>
+             ${progBar(100, 'var(--success)')}`
+          : `<div style="font-size:20px;font-weight:500;color:var(--accent)">${turnosRestantes} turno${turnosRestantes !== 1 ? 's' : ''}</div>
+             <div style="font-size:12px;color:var(--text3)">$${fmt(salarioActualMes)} de $${fmt(salarioObj)} objetivo</div>
+             ${progBar(salarioPct, 'var(--accent)')}`
+        }
+      </div>
+
+      <!-- Meta de servicios del mes -->
+      <div style="${objCardStyle}">
+        <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3)">Meta de servicios</div>
+        <div style="font-size:20px;font-weight:500;color:var(--text)">${pagosMes.length} <span style="font-size:14px;color:var(--text3);font-weight:400">/ ${metaSvc}</span></div>
+        <div style="font-size:12px;color:var(--text3)">${svcRestantes > 0 ? svcRestantes + ' servicio' + (svcRestantes !== 1 ? 's' : '') + ' restantes' : '✓ Meta alcanzada'}</div>
+        ${progBar(progPct, progPct >= 100 ? 'var(--success)' : 'var(--accent)')}
+      </div>
+
     </div>
   </div>
 
@@ -673,21 +774,25 @@ function renderIngList() {
     const cost = cpu * (ing.cantidad || 0);
     return `<div class="ingredient-row">
       <select class="form-input flex1" style="font-size:13px"
-        onchange="tempIngredientes[${i}].insumoId=this.value;renderIngList()">
+        onchange="setIngInsumo(${i},this.value)">
         <option value="">Seleccionar insumo…</option>
         ${insumos.map(x => `<option value="${x.id}" ${x.id === ing.insumoId ? 'selected' : ''}>${x.nombre} (${x.unidad})</option>`).join('')}
       </select>
       <input type="number" class="form-input" style="width:76px;font-size:13px"
         value="${ing.cantidad || ''}" placeholder="Cant."
-        oninput="tempIngredientes[${i}].cantidad=parseFloat(this.value)||0;renderIngList()">
+        oninput="setIngCant(${i},this.value)">
       <div class="cost-tag">$${fmtDec(cost)}</div>
-      <button class="btn btn-ghost btn-sm" onclick="tempIngredientes.splice(${i},1);renderIngList()">
+      <button class="btn btn-ghost btn-sm" onclick="removeIng(${i})">
         <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>`;
   }).join('');
   updateSvcPreview();
 }
+
+window.setIngInsumo = function (i, val) { tempIngredientes[i].insumoId = val; renderIngList(); };
+window.setIngCant = function (i, val) { tempIngredientes[i].cantidad = parseFloat(val) || 0; renderIngList(); };
+window.removeIng = function (i) { tempIngredientes.splice(i, 1); renderIngList(); };
 
 function updateSvcPreview() {
   const el = document.getElementById('svc-preview');
@@ -1361,6 +1466,11 @@ function renderConfigPage() {
         <label class="form-label">Comisión manicurista (% del precio final)</label>
         <input class="form-input" type="number" id="cfg-comision" value="${config.comisionPct || 0}" min="0" max="100">
       </div>
+      <div class="form-group">
+        <label class="form-label">Salario objetivo manicurista ($/mes)</label>
+        <input class="form-input" type="number" id="cfg-salario-obj" value="${config.salarioObjetivoManicurista || 0}" placeholder="0">
+        <div class="form-hint">Usado para calcular cuántos turnos faltan para llegar a la meta</div>
+      </div>
       <div class="calc-display">
         Costo operativo por servicio: <strong>$${fmt(costoOperativoPorServicio())}</strong>
       </div>
@@ -1438,12 +1548,15 @@ function renderGastosFijosList() {
   return gastosFijos.map((g, i) => `
     <div class="gasto-row">
       <input class="form-input flex1" value="${g.nombre}" placeholder="Nombre del gasto"
-        oninput="gastosFijos[${i}].nombre=this.value">
+        oninput="setGastoNombre(${i},this.value)">
       <input class="form-input" type="number" value="${g.monto}" placeholder="Monto $"
-        style="width:110px" oninput="gastosFijos[${i}].monto=parseFloat(this.value)||0">
+        style="width:110px" oninput="setGastoMonto(${i},this.value)">
       <button class="btn btn-danger btn-sm" onclick="removeGastoFijo(${i})">${iconTrash()}</button>
     </div>`).join('');
 }
+
+window.setGastoNombre = function (i, val) { gastosFijos[i].nombre = val; };
+window.setGastoMonto = function (i, val) { gastosFijos[i].monto = parseFloat(val) || 0; };
 
 window.addGastoFijo = function () {
   gastosFijos.push({ id: uid(), nombre: '', monto: 0 });
@@ -1459,6 +1572,7 @@ window.saveConfigPage = async function () {
   config.serviciosMes = parseFloat(document.getElementById('cfg-svcmes').value) || 1;
   config.margenGanancia = parseFloat(document.getElementById('cfg-margen').value) || 0;
   config.comisionPct = parseFloat(document.getElementById('cfg-comision').value) || 0;
+  config.salarioObjetivoManicurista = parseFloat(document.getElementById('cfg-salario-obj').value) || 0;
   config.saldoEfectivo = parseFloat(document.getElementById('cfg-saldo-ef').value) || 0;
   config.saldoCuenta = parseFloat(document.getElementById('cfg-saldo-ct').value) || 0;
   config.userName = document.getElementById('cfg-nombre').value.trim() || 'Barbi';
