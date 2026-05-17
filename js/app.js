@@ -147,22 +147,21 @@ function calcularServicio(servicio) {
 
   const costoOperativo = costoOperativoPorServicio();
   const costoBase = costoMateriales + costoOperativo;
-  // Ganancia deseada = lo que el estudio quiere ganar neto, DESPUÉS de pagar la comisión
-  const gananciaDeseada = costoBase * (config.margenGanancia / 100);
-  // Precio = (costos + ganancia deseada) / (1 - % manicurista)
-  // Así el estudio siempre recibe su margen completo sin importar la comisión
-  const comisionFactor = 1 - ((config.comisionPct || 0) / 100);
-  const precioSugerido = comisionFactor > 0
-    ? (costoBase + gananciaDeseada) / comisionFactor
-    : costoBase + gananciaDeseada;
+  // Fórmula correcta: precio tal que el salon gana margenGanancia% del precio final
+  // costoBase = precio * (1 - comision% - margen%)
+  // Así: ganancia = precio * margen% exactamente
+  const factor = 1 - ((config.comisionPct || 0) / 100) - (config.margenGanancia / 100);
+  const precioSugerido = factor > 0
+    ? costoBase / factor
+    : costoBase * (1 + config.margenGanancia / 100);
   const comisionMonto = precioSugerido * ((config.comisionPct || 0) / 100);
-  const gananciaNeta = gananciaDeseada; // = precioSugerido - costoBase - comisionMonto
+  const gananciaNeta  = precioSugerido * (config.margenGanancia / 100);
 
   return {
     costoMateriales,
     costoOperativo,
     costoBase,
-    margen: gananciaDeseada,
+    margen: gananciaNeta,
     precioSugerido,
     comisionMonto,
     gananciaNeta
@@ -500,7 +499,7 @@ function renderDashboard() {
 //  INSUMOS (sin cambios, funciona bien)
 // ════════════════════════════════════════════════════════════
 let insumoSearch = '';
-window.setInsumoSearch = function (v) { insumoSearch = v; renderInsumos(); };
+window.setInsumoSearch = function (v) { insumoSearch = v; renderInsumos(); refocus('ins-search', v); };
 
 function renderInsumos() {
   document.getElementById('topbarActions').innerHTML = `
@@ -516,7 +515,7 @@ function renderInsumos() {
   <div class="card">
     <div class="search-wrap">
       <div class="search-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
-      <input class="form-input" placeholder="Buscar por nombre o categoría…" value="${insumoSearch}"
+      <input class="form-input" id="ins-search" placeholder="Buscar por nombre o categoría…" value="${insumoSearch}"
         oninput="setInsumoSearch(this.value)" style="padding-left:32px">
     </div>
     ${filtered.length === 0
@@ -947,9 +946,16 @@ let movBusqueda = '';
 let pagoForma = 'efectivo';
 let pagoTotalFijo = 0; // >0 cuando viene de un servicio seleccionado
 
-window.setCajaBusqueda = function (v) { cajaBusqueda = v; renderCaja(); };
+function refocus(id, val) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.focus();
+  const len = (val || '').length;
+  try { el.setSelectionRange(len, len); } catch (_) {}
+}
+window.setCajaBusqueda = function (v) { cajaBusqueda = v; renderCaja(); refocus('caja-search', v); };
 window.setCajaMonth    = function (v) { cajaMonth = v;    renderCaja(); };
-window.setMovBusqueda  = function (v) { movBusqueda = v;  renderCaja(); };
+window.setMovBusqueda  = function (v) { movBusqueda = v;  renderCaja(); refocus('mov-search', v); };
 
 function cajaTabBar() {
   return `<div class="tabs-bar">
@@ -1004,7 +1010,7 @@ function renderCajaPagos() {
     <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
       <div class="search-wrap" style="flex:1;min-width:180px;margin-bottom:0">
         <div class="search-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
-        <input class="form-input" placeholder="Buscar servicio o cliente…" value="${cajaBusqueda}"
+        <input class="form-input" id="caja-search" placeholder="Buscar servicio o cliente…" value="${cajaBusqueda}"
           oninput="setCajaBusqueda(this.value)" style="padding-left:32px">
       </div>
       <input type="month" class="form-input" style="width:160px" value="${cajaMonth}"
@@ -1052,7 +1058,7 @@ function renderCajaMovimientos() {
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
       <div class="search-wrap" style="flex:1;min-width:180px;margin-bottom:0">
         <div class="search-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
-        <input class="form-input" placeholder="Buscar descripción…" value="${movBusqueda}"
+        <input class="form-input" id="mov-search" placeholder="Buscar descripción…" value="${movBusqueda}"
           oninput="setMovBusqueda(this.value)" style="padding-left:32px">
       </div>
       <input type="month" class="form-input" style="width:160px" value="${cajaMonth}"
