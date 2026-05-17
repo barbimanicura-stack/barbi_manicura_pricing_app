@@ -687,7 +687,8 @@ function renderServicios() {
         </div></div>`
       : servicios.map(s => {
           const c = calcularServicio(s);
-          const precioCobrado = s.descuento > 0 ? c.precioSugerido * (1 - s.descuento / 100) : c.precioSugerido;
+          const precioBase = s.precioCustom > 0 ? s.precioCustom : c.precioSugerido;
+          const precioCobrado = s.descuento > 0 ? precioBase * (1 - s.descuento / 100) : precioBase;
           const comisionReal = precioCobrado * ((config.comisionPct || 0) / 100);
           const gananciaReal = precioCobrado - c.costoMateriales - c.costoOperativo - comisionReal;
           const pierdeDinero = gananciaReal < 0;
@@ -704,6 +705,7 @@ function renderServicios() {
               ${s.tiempo ? `<span class="badge badge-neutral">⏱ ${s.tiempo} min</span>` : ''}
               ${s.dificultad ? `<span class="badge badge-info">${s.dificultad}</span>` : ''}
               <span class="badge badge-neutral">${(s.ingredientes || []).length} insumos</span>
+              ${s.precioCustom > 0 ? `<span class="badge badge-info">precio custom</span>` : ''}
               ${s.descuento > 0 ? `<span class="badge ${pierdeDinero ? 'badge-danger' : 'badge-warn'}">−${s.descuento}% promo${pierdeDinero ? ' ⚠' : ''}</span>` : ''}
             </div>
             <div class="cost-breakdown" style="margin-top:10px;margin-bottom:0">
@@ -711,10 +713,14 @@ function renderServicios() {
               <div class="cost-row"><span class="cost-label">Materiales</span><span>$${fmt(c.costoMateriales)}</span></div>
               <div class="cost-row"><span class="cost-label">Operativo</span><span>$${fmt(c.costoOperativo)}</span></div>
               <div class="cost-row subtotal"><span class="cost-label">Costo base</span><span class="font-medium">$${fmt(c.costoBase)}</span></div>
+              ${s.precioCustom > 0
+                ? `<div class="cost-row"><span class="cost-label text-hint" style="text-decoration:line-through">Precio calculado</span><span class="text-hint" style="text-decoration:line-through">$${fmt(c.precioSugerido)}</span></div>
+                   <div class="cost-row"><span class="cost-label">Precio personalizado</span><span class="font-medium">$${fmt(s.precioCustom)}</span></div>`
+                : `<div class="cost-row"><span class="cost-label">Precio calculado</span><span>$${fmt(c.precioSugerido)}</span></div>`
+              }
               ${s.descuento > 0
-                ? `<div class="cost-row"><span class="cost-label text-hint" style="text-decoration:line-through">Precio sin promo</span><span class="text-hint" style="text-decoration:line-through">$${fmt(c.precioSugerido)}</span></div>
-                   <div class="cost-row total"><span class="cost-label">Precio con −${s.descuento}%</span><span class="cost-val">$${fmt(precioCobrado)}</span></div>`
-                : `<div class="cost-row total"><span class="cost-label">Precio</span><span class="cost-val">$${fmt(c.precioSugerido)}</span></div>`
+                ? `<div class="cost-row total"><span class="cost-label">Con promo −${s.descuento}%</span><span class="cost-val">$${fmt(precioCobrado)}</span></div>`
+                : `<div class="cost-row total"><span class="cost-label">Precio final</span><span class="cost-val">$${fmt(precioCobrado)}</span></div>`
               }
               ${config.comisionPct > 0 || s.descuento > 0 ? `
               <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--accent2)">
@@ -733,7 +739,7 @@ function renderServicios() {
 window.openNuevoServicio = function (id) {
   const s = id ? servicios.find(sv => sv.id === id) : null;
   tempIngredientes = s ? JSON.parse(JSON.stringify(s.ingredientes || [])) : [];
-  tempPrecioCustom = 0;
+  tempPrecioCustom = s?.precioCustom || 0;
   openModal(`
   <div class="modal-header">
     <div class="modal-title">${s ? 'Editar servicio' : 'Nuevo servicio'}</div>
@@ -784,8 +790,8 @@ window.openNuevoServicio = function (id) {
       <div class="divider" style="margin:10px 0 8px"></div>
       <div class="form-label" style="margin-bottom:6px">Precio a cobrar ($) <span style="font-weight:400;color:var(--text3)">— editá para simular</span></div>
       <div style="display:flex;align-items:center;gap:8px">
-        <input class="form-input" type="number" id="svc-precio-custom" style="max-width:150px" placeholder="Automático" oninput="setSvcPrecioCustom(this.value)">
-        <button class="btn btn-ghost btn-sm" id="svc-reset-btn" onclick="setSvcPrecioCustom(0)" style="display:none">↩ Usar sugerido</button>
+        <input class="form-input" type="number" id="svc-precio-custom" style="max-width:150px" placeholder="Automático" value="${tempPrecioCustom > 0 ? tempPrecioCustom : ''}" oninput="setSvcPrecioCustom(this.value)">
+        <button class="btn btn-ghost btn-sm" id="svc-reset-btn" onclick="setSvcPrecioCustom(0)" style="${tempPrecioCustom > 0 ? '' : 'display:none'}">↩ Usar sugerido</button>
       </div>
     </div>
     <div id="svc-preview"></div>
@@ -858,12 +864,12 @@ function updateSvcPreview() {
   if (wrapper) wrapper.style.display = 'block';
 
   const descuentoPct = parseFloat(document.getElementById('svc-descuento')?.value) || 0;
-  const precioBase   = c.precioSugerido * (1 - descuentoPct / 100);
-  const precioEfect  = tempPrecioCustom > 0 ? tempPrecioCustom : precioBase;
+  const precioBase   = (tempPrecioCustom > 0 ? tempPrecioCustom : c.precioSugerido) * (1 - descuentoPct / 100);
+  const precioEfect  = precioBase;
 
   // Update placeholder so user sees what the auto price would be
   const priceInp = document.getElementById('svc-precio-custom');
-  if (priceInp && !tempPrecioCustom) priceInp.placeholder = Math.round(precioBase).toString();
+  if (priceInp && !tempPrecioCustom) priceInp.placeholder = Math.round(c.precioSugerido).toString();
 
   const comisionPct  = config.comisionPct || 0;
   const comEfect     = precioEfect * (comisionPct / 100);
@@ -919,6 +925,7 @@ window.saveServicio = async function (id) {
     tiempo: parseInt(document.getElementById('svc-tiempo').value) || 0,
     dificultad: document.getElementById('svc-dif').value,
     descuento: descuento > 0 ? descuento : 0,
+    precioCustom: tempPrecioCustom > 0 ? tempPrecioCustom : 0,
     ingredientes: tempIngredientes.filter(i => i.insumoId && i.cantidad > 0)
   };
   await saveDoc('servicios', obj);
@@ -1172,7 +1179,8 @@ window.openNuevoPago = function () {
         <option value="">— Cobro manual (sin servicio) —</option>
         ${servicios.map(s => {
           const c = calcularServicio(s);
-          const precio = s.descuento > 0 ? c.precioSugerido * (1 - s.descuento / 100) : c.precioSugerido;
+          const baseP = s.precioCustom > 0 ? s.precioCustom : c.precioSugerido;
+          const precio = s.descuento > 0 ? baseP * (1 - s.descuento / 100) : baseP;
           const label = s.descuento > 0 ? `${s.nombre} (−${s.descuento}% promo)` : s.nombre;
           return `<option value="${s.id}">${label} · $${fmt(precio)}</option>`;
         }).join('')}
@@ -1236,7 +1244,7 @@ window.onPagoSvcChange = function (val) {
     const s = servicios.find(x => x.id === val);
     if (s) {
       const c = calcularServicio(s);
-      let precio = c.precioSugerido;
+      let precio = s.precioCustom > 0 ? s.precioCustom : c.precioSugerido;
       let descuentoMonto = 0;
       if (s.descuento && s.descuento > 0) {
         descuentoMonto = precio * (s.descuento / 100);
