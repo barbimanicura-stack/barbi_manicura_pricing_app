@@ -662,8 +662,16 @@ let tempPrecioCustom = 0; // 0 = usar precio sugerido calculado
 
 window.setSvcPrecioCustom = function (val) {
   tempPrecioCustom = parseFloat(val) || 0;
+  if (tempPrecioCustom === 0) {
+    const inp = document.getElementById('svc-precio-custom');
+    if (inp) inp.value = '';
+  }
+  const btn = document.getElementById('svc-reset-btn');
+  if (btn) btn.style.display = tempPrecioCustom > 0 ? 'inline-flex' : 'none';
   updateSvcPreview();
 };
+
+window.onSvcDescuentoChange = function () { updateSvcPreview(); };
 
 function renderServicios() {
   document.getElementById('topbarActions').innerHTML = `
@@ -680,6 +688,10 @@ function renderServicios() {
         </div></div>`
       : servicios.map(s => {
           const c = calcularServicio(s);
+          const precioCobrado = s.descuento > 0 ? c.precioSugerido * (1 - s.descuento / 100) : c.precioSugerido;
+          const comisionReal = precioCobrado * ((config.comisionPct || 0) / 100);
+          const gananciaReal = precioCobrado - c.costoMateriales - c.costoOperativo - comisionReal;
+          const pierdeDinero = gananciaReal < 0;
           return `<div class="card">
             <div class="flex items-center justify-between mb-2">
               <div class="font-medium" style="font-size:15px">${s.nombre}</div>
@@ -693,24 +705,24 @@ function renderServicios() {
               ${s.tiempo ? `<span class="badge badge-neutral">⏱ ${s.tiempo} min</span>` : ''}
               ${s.dificultad ? `<span class="badge badge-info">${s.dificultad}</span>` : ''}
               <span class="badge badge-neutral">${(s.ingredientes || []).length} insumos</span>
-              ${s.descuento > 0 ? `<span class="badge badge-warn">−${s.descuento}% promo</span>` : ''}
+              ${s.descuento > 0 ? `<span class="badge ${pierdeDinero ? 'badge-danger' : 'badge-warn'}">−${s.descuento}% promo${pierdeDinero ? ' ⚠' : ''}</span>` : ''}
             </div>
-            <div class="cost-breakdown" style="margin-top: 10px; margin-bottom: 0;">
-              <div class="cost-section-label">Desglose de costos</div>
+            <div class="cost-breakdown" style="margin-top:10px;margin-bottom:0">
+              <div class="cost-section-label">Desglose</div>
               <div class="cost-row"><span class="cost-label">Materiales</span><span>$${fmt(c.costoMateriales)}</span></div>
               <div class="cost-row"><span class="cost-label">Operativo</span><span>$${fmt(c.costoOperativo)}</span></div>
               <div class="cost-row subtotal"><span class="cost-label">Costo base</span><span class="font-medium">$${fmt(c.costoBase)}</span></div>
-              <div class="cost-row"><span class="cost-label">Margen ${config.margenGanancia}%</span><span>$${fmt(c.margen)}</span></div>
               ${s.descuento > 0
-                ? `<div class="cost-row"><span class="cost-label text-hint" style="text-decoration:line-through">Precio base</span><span class="text-hint" style="text-decoration:line-through">$${fmt(c.precioSugerido)}</span></div>
-                   <div class="cost-row total"><span class="cost-label">Precio con descuento</span><span class="cost-val">$${fmt(c.precioSugerido * (1 - s.descuento / 100))}</span></div>`
-                : `<div class="cost-row total"><span class="cost-label">Precio cobrado</span><span class="cost-val">$${fmt(c.precioSugerido)}</span></div>`
+                ? `<div class="cost-row"><span class="cost-label text-hint" style="text-decoration:line-through">Precio sin promo</span><span class="text-hint" style="text-decoration:line-through">$${fmt(c.precioSugerido)}</span></div>
+                   <div class="cost-row total"><span class="cost-label">Precio con −${s.descuento}%</span><span class="cost-val">$${fmt(precioCobrado)}</span></div>`
+                : `<div class="cost-row total"><span class="cost-label">Precio</span><span class="cost-val">$${fmt(c.precioSugerido)}</span></div>`
               }
-              ${config.comisionPct > 0 ? `
-              <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--accent2);">
-                <div class="cost-section-label">Distribución</div>
-                <div class="cost-row"><span class="cost-label text-danger">Comisión manicurista (${config.comisionPct}%)</span><span class="text-danger">— $${fmt(c.comisionMonto)}</span></div>
-                <div class="cost-row"><span class="cost-label text-success">Ganancia studio</span><span class="text-success font-medium">$${fmt(c.gananciaNeta)}</span></div>
+              ${config.comisionPct > 0 || s.descuento > 0 ? `
+              <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--accent2)">
+                <div class="cost-section-label">Distribución real</div>
+                ${config.comisionPct > 0 ? `<div class="cost-row"><span class="cost-label text-danger">Comisión manicurista (${config.comisionPct}%)</span><span class="text-danger">— $${fmt(comisionReal)}</span></div>` : ''}
+                <div class="cost-row"><span class="cost-label ${pierdeDinero ? 'text-danger' : 'text-success'}">Ganancia studio</span><span class="${pierdeDinero ? 'text-danger' : 'text-success'} font-medium">$${fmt(gananciaReal)}</span></div>
+                ${pierdeDinero ? `<div style="font-size:11px;color:var(--danger);margin-top:4px">Precio de promo insuficiente para cubrir costos.</div>` : ''}
               </div>` : ''}
             </div>
           </div>`;
@@ -756,7 +768,7 @@ window.openNuevoServicio = function (id) {
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Descuento / Promoción (%)</label>
-        <input class="form-input" type="number" id="svc-descuento" value="${s?.descuento || ''}" placeholder="0" min="0" max="100">
+        <input class="form-input" type="number" id="svc-descuento" value="${s?.descuento || ''}" placeholder="0" min="0" max="100" oninput="onSvcDescuentoChange()">
         <div class="form-hint">Dejar en 0 si no hay promoción activa</div>
       </div>
     </div>
@@ -769,6 +781,14 @@ window.openNuevoServicio = function (id) {
       ? `<p class="text-sm text-muted">Primero cargá insumos desde la sección <strong>Insumos</strong>.</p>`
       : ''}
     <div id="ing-list"></div>
+    <div id="svc-precio-wrapper" style="display:none">
+      <div class="divider" style="margin:10px 0 8px"></div>
+      <div class="form-label" style="margin-bottom:6px">Precio a cobrar ($) <span style="font-weight:400;color:var(--text3)">— editá para simular</span></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input class="form-input" type="number" id="svc-precio-custom" style="max-width:150px" placeholder="Automático" oninput="setSvcPrecioCustom(this.value)">
+        <button class="btn btn-ghost btn-sm" id="svc-reset-btn" onclick="setSvcPrecioCustom(0)" style="display:none">↩ Usar sugerido</button>
+      </div>
+    </div>
     <div id="svc-preview"></div>
   </div>
   <div class="modal-footer">
@@ -803,7 +823,7 @@ function renderIngList() {
       <input type="number" class="form-input" style="width:76px;font-size:13px"
         value="${ing.cantidad || ''}" placeholder="Cant."
         oninput="setIngCant(${i},this.value)">
-      <div class="cost-tag">$${fmtDec(cost)}</div>
+      <div class="cost-tag" id="ing-cost-${i}">$${fmtDec(cost)}</div>
       <button class="btn btn-ghost btn-sm" onclick="removeIng(${i})">
         <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -813,51 +833,80 @@ function renderIngList() {
 }
 
 window.setIngInsumo = function (i, val) { tempIngredientes[i].insumoId = val; renderIngList(); };
-window.setIngCant = function (i, val) { tempIngredientes[i].cantidad = parseFloat(val) || 0; renderIngList(); };
+window.setIngCant = function (i, val) {
+  tempIngredientes[i].cantidad = parseFloat(val) || 0;
+  const ins = insumos.find(x => x.id === tempIngredientes[i].insumoId);
+  const cpu = ins && ins.cantidad > 0 ? ins.costo / ins.cantidad : 0;
+  const costEl = document.getElementById('ing-cost-' + i);
+  if (costEl) costEl.textContent = '$' + fmtDec(cpu * tempIngredientes[i].cantidad);
+  updateSvcPreview();
+};
 window.removeIng = function (i) { tempIngredientes.splice(i, 1); renderIngList(); };
 
 function updateSvcPreview() {
   const el = document.getElementById('svc-preview');
+  const wrapper = document.getElementById('svc-precio-wrapper');
   if (!el) return;
+
   const c = calcularServicio({ ingredientes: tempIngredientes });
-  if (c.costoBase <= 0) { el.innerHTML = ''; return; }
 
-  const precioEfectivo = tempPrecioCustom > 0 ? tempPrecioCustom : c.precioSugerido;
-  const comCustom = precioEfectivo * ((config.comisionPct || 0) / 100);
-  const netaCustom = precioEfectivo - c.costoMateriales - c.costoOperativo - comCustom;
-  const margenPct  = precioEfectivo > 0 ? Math.round((netaCustom / precioEfectivo) * 100) : 0;
-  const comPct     = precioEfectivo > 0 ? Math.round((comCustom / precioEfectivo) * 100) : 0;
-  const costoPct   = precioEfectivo > 0 ? Math.round(((c.costoMateriales + c.costoOperativo) / precioEfectivo) * 100) : 0;
+  if (c.costoBase <= 0) {
+    el.innerHTML = '';
+    if (wrapper) wrapper.style.display = 'none';
+    return;
+  }
 
-  el.innerHTML = `<div class="cost-breakdown">
-    <div class="cost-section-label">Costos</div>
+  if (wrapper) wrapper.style.display = 'block';
+
+  const descuentoPct = parseFloat(document.getElementById('svc-descuento')?.value) || 0;
+  const precioBase   = c.precioSugerido * (1 - descuentoPct / 100);
+  const precioEfect  = tempPrecioCustom > 0 ? tempPrecioCustom : precioBase;
+
+  // Update placeholder so user sees what the auto price would be
+  const priceInp = document.getElementById('svc-precio-custom');
+  if (priceInp && !tempPrecioCustom) priceInp.placeholder = Math.round(precioBase).toString();
+
+  const comisionPct  = config.comisionPct || 0;
+  const comEfect     = precioEfect * (comisionPct / 100);
+  const netaEfect    = precioEfect - c.costoMateriales - c.costoOperativo - comEfect;
+  const margenPct    = precioEfect > 0 ? Math.round((netaEfect / precioEfect) * 100) : 0;
+  const comPct       = precioEfect > 0 ? Math.round((comEfect / precioEfect) * 100) : 0;
+  const costoPct     = precioEfect > 0 ? Math.round(((c.costoMateriales + c.costoOperativo) / precioEfect) * 100) : 0;
+  const pierde       = netaEfect < 0;
+
+  // Max discount before losing money: precio*(1-d/100)*(1-com/100) = costoBase
+  const comFactor    = 1 - comisionPct / 100;
+  const maxDescPct   = comFactor > 0 && c.precioSugerido > 0
+    ? Math.max(0, Math.floor((1 - c.costoBase / (c.precioSugerido * comFactor)) * 1000) / 10)
+    : 0;
+
+  el.innerHTML = `<div class="cost-breakdown" style="margin-top:10px">
+    <div class="cost-section-label">Costos del servicio</div>
     <div class="cost-row"><span class="cost-label">Materiales</span><span>$${fmt(c.costoMateriales)}</span></div>
-    <div class="cost-row"><span class="cost-label">Operativo</span><span>$${fmt(c.costoOperativo)}</span></div>
+    <div class="cost-row"><span class="cost-label">Operativo (${config.serviciosMes}/mes)</span><span>$${fmt(c.costoOperativo)}</span></div>
     <div class="cost-row subtotal"><span class="cost-label">Costo base</span><span>$${fmt(c.costoBase)}</span></div>
+    <div class="cost-row"><span class="cost-label">Precio sugerido (sin promo)</span><span class="text-hint">$${fmt(c.precioSugerido)}</span></div>
+    ${descuentoPct > 0 ? `<div class="cost-row"><span class="cost-label text-warn">Precio con −${descuentoPct}%</span><span class="text-warn font-medium">$${fmt(precioBase)}</span></div>` : ''}
 
-    <div class="cost-section-label" style="margin-top:10px">Precio a cobrar</div>
-    <div class="cost-row" style="align-items:center">
-      <span class="cost-label">Precio sugerido</span>
-      <span class="text-hint text-sm">$${fmt(c.precioSugerido)}</span>
-    </div>
-    <div class="form-group" style="margin:6px 0 10px">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span class="text-sm" style="color:var(--text2);white-space:nowrap">Precio final $</span>
-        <input class="form-input" type="number" style="max-width:130px"
-          placeholder="${Math.round(c.precioSugerido)}"
-          value="${tempPrecioCustom > 0 ? tempPrecioCustom : ''}"
-          oninput="setSvcPrecioCustom(this.value)">
-        ${tempPrecioCustom > 0
-          ? `<button class="btn btn-ghost btn-sm" onclick="setSvcPrecioCustom(0);this.closest('.form-group').querySelector('input').value=''" style="white-space:nowrap">Usar sugerido</button>`
-          : ''}
-      </div>
-    </div>
-
-    <div class="cost-section-label">Distribución a $${fmt(precioEfectivo)}</div>
+    <div class="cost-section-label" style="margin-top:10px">Distribución a $${fmt(precioEfect)}</div>
     <div class="cost-row"><span class="cost-label">Costos (${costoPct}%)</span><span>$${fmt(c.costoMateriales + c.costoOperativo)}</span></div>
-    ${config.comisionPct > 0 ? `
-    <div class="cost-row"><span class="cost-label text-danger">Comisión manicurista ${comPct}%</span><span class="text-danger">$${fmt(comCustom)}</span></div>` : ''}
-    <div class="cost-row total"><span class="cost-label text-success">Ganancia studio ${margenPct}%</span><span class="text-success font-medium cost-val">$${fmt(netaCustom)}</span></div>
+    ${comisionPct > 0 ? `<div class="cost-row"><span class="cost-label text-danger">Comisión manicurista (${comPct}%)</span><span class="text-danger">$${fmt(comEfect)}</span></div>` : ''}
+    <div class="cost-row total">
+      <span class="cost-label ${pierde ? 'text-danger' : 'text-success'}">Ganancia studio (${margenPct}%)</span>
+      <span class="cost-val ${pierde ? 'text-danger' : 'text-success'}">$${fmt(netaEfect)}</span>
+    </div>
+
+    ${descuentoPct > 0 || pierde ? `
+    <div style="margin-top:10px;padding:10px 12px;border-radius:var(--radius-sm);background:${pierde ? 'var(--danger-bg)' : 'var(--warn-bg)'};border-left:3px solid ${pierde ? 'var(--danger)' : 'var(--warn)'}">
+      ${pierde
+        ? `<div style="font-weight:600;color:var(--danger);font-size:13px">Perdés $${fmt(Math.abs(netaEfect))} por turno</div>
+           <div style="font-size:12px;color:var(--text2);margin-top:3px">El descuento supera el margen del studio.</div>
+           <div style="font-size:12px;color:var(--text2)">Descuento máximo sin perder: <strong>${maxDescPct}%</strong></div>`
+        : `<div style="font-weight:500;color:var(--warn);font-size:13px">Promo activa: −${descuentoPct}%</div>
+           <div style="font-size:12px;color:var(--text2);margin-top:3px">El studio absorbe el descuento (la manicurista cobra sobre el precio cobrado).</div>
+           <div style="font-size:12px;color:var(--text2)">Podés descontar hasta <strong>${maxDescPct}%</strong> sin perder dinero.</div>`
+      }
+    </div>` : ''}
   </div>`;
 }
 
@@ -984,7 +1033,11 @@ function renderCajaPagos() {
 function renderCajaMovimientos() {
   const q = movBusqueda.toLowerCase();
   const filtrados = [...movimientos]
-    .filter(m => !q || m.descripcion.toLowerCase().includes(q) || m.tipo.includes(q))
+    .filter(m => {
+      const matchMes = !cajaMonth || m.fecha.slice(0, 7) === cajaMonth;
+      const matchQ   = !q || m.descripcion.toLowerCase().includes(q) || m.tipo.includes(q);
+      return matchMes && matchQ;
+    })
     .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
   const compras  = filtrados.filter(m => m.tipo === 'compra').reduce((a, m) => a + m.monto, 0);
   const gastos   = filtrados.filter(m => m.tipo === 'gasto').reduce((a, m) => a + m.monto, 0);
@@ -1002,6 +1055,8 @@ function renderCajaMovimientos() {
         <input class="form-input" placeholder="Buscar descripción…" value="${movBusqueda}"
           oninput="setMovBusqueda(this.value)" style="padding-left:32px">
       </div>
+      <input type="month" class="form-input" style="width:160px" value="${cajaMonth}"
+        onchange="setCajaMonth(this.value)">
       <button class="btn btn-secondary btn-sm" onclick="openNuevoMovimiento('compra')">Compra insumos</button>
       <button class="btn btn-secondary btn-sm" onclick="openNuevoMovimiento('gasto')">Gasto operativo</button>
       <button class="btn btn-secondary btn-sm" onclick="openNuevoMovimiento('transfer')">Transferencia</button>
@@ -1029,7 +1084,9 @@ function renderCajaMovimientos() {
 }
 
 function renderCajaArqueo() {
-  const mes = new Date().getMonth(), anio = new Date().getFullYear();
+  const [anioStr, mesStr] = cajaMonth.split('-');
+  const mes = parseInt(mesStr) - 1, anio = parseInt(anioStr);
+  const mesLabel = new Date(anio, mes, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
   const mesPagos = pagos.filter(p => { const d = new Date(p.fecha); return d.getMonth() === mes && d.getFullYear() === anio; });
   const totalIngresos   = mesPagos.reduce((a, p) => a + p.total, 0);
   const efMes           = mesPagos.reduce((a, p) => a + (p.efectivo || 0), 0);
@@ -1042,10 +1099,12 @@ function renderCajaArqueo() {
   const gastosFijosMes = totalGastosFijosM();
   const egresosTotales = comisionMes + comprasMes + gastosMes + gastosFijosMes;
   const resultadoFinal = gananciaNetaMes - egresosTotales;
-  const mesLabel = new Date().toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
 
   document.getElementById('mainContent').innerHTML = `
   ${cajaTabBar()}
+  <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+    <input type="month" class="form-input" style="width:170px" value="${cajaMonth}" onchange="setCajaMonth(this.value)">
+  </div>
   <div class="grid-2">
     <div class="card">
       <div class="section-title mb-3">Ingresos — ${mesLabel}</div>
@@ -1107,8 +1166,9 @@ window.openNuevoPago = function () {
         <option value="">— Cobro manual (sin servicio) —</option>
         ${servicios.map(s => {
           const c = calcularServicio(s);
-          const label = s.descuento ? `${s.nombre}  (−${s.descuento}% dto.)` : s.nombre;
-          return `<option value="${s.id}">${label} · $${fmt(c.precioSugerido)}</option>`;
+          const precio = s.descuento > 0 ? c.precioSugerido * (1 - s.descuento / 100) : c.precioSugerido;
+          const label = s.descuento > 0 ? `${s.nombre} (−${s.descuento}% promo)` : s.nombre;
+          return `<option value="${s.id}">${label} · $${fmt(precio)}</option>`;
         }).join('')}
       </select>
     </div>
@@ -1477,11 +1537,16 @@ window.deleteMovimiento = async function (id) {
 // ════════════════════════════════════════════════════════════
 //  ESTADÍSTICAS
 // ════════════════════════════════════════════════════════════
-function renderEstadisticas() {
-  const hoy = new Date();
-  const mesAct = hoy.getMonth(), anioAct = hoy.getFullYear();
+let statsMonth = new Date().toISOString().slice(0, 7);
+window.setStatsMonth = function (v) { statsMonth = v; renderEstadisticas(); };
 
-  // ── Datos del mes actual ──────────────────────────────────
+function renderEstadisticas() {
+  const [anioStr, mesStr] = statsMonth.split('-');
+  const mesAct = parseInt(mesStr) - 1, anioAct = parseInt(anioStr);
+  const selectedDate = new Date(anioAct, mesAct, 1);
+  const mesLabel = selectedDate.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+
+  // ── Datos del mes seleccionado ────────────────────────────
   const pagosMes = pagos.filter(p => {
     const d = new Date(p.fecha);
     return d.getMonth() === mesAct && d.getFullYear() === anioAct;
@@ -1502,12 +1567,11 @@ function renderEstadisticas() {
   const gastosFijosTotal = totalGastosFijosM();
   const egresosMes  = comisionMes + comprasMes + gastosMes + gastosFijosTotal;
   const resultadoMes = netaMes - egresosMes;
-  const mesLabel = hoy.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
 
-  // ── Últimos 6 meses para gráfico ─────────────────────────
+  // ── 6 meses para gráfico (relativos al mes seleccionado) ──
   const meses = [];
   for (let i = 5; i >= 0; i--) {
-    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
+    const d = new Date(anioAct, mesAct, 1); d.setMonth(d.getMonth() - i);
     const m = d.getMonth(), a = d.getFullYear();
     const ps = pagos.filter(p => { const pd = new Date(p.fecha); return pd.getMonth() === m && pd.getFullYear() === a; });
     meses.push({
@@ -1568,6 +1632,11 @@ function renderEstadisticas() {
   const objCard = 'background:var(--bg2);border-radius:var(--radius);padding:14px;display:flex;flex-direction:column;gap:5px';
 
   document.getElementById('mainContent').innerHTML = `
+
+  <!-- Filtro de período -->
+  <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+    <input type="month" class="form-input" style="width:170px" value="${statsMonth}" onchange="setStatsMonth(this.value)">
+  </div>
 
   <!-- Resumen del mes -->
   <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
