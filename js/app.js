@@ -689,7 +689,8 @@ function renderServicios() {
           const c = calcularServicio(s);
           const precioBase = s.precioCustom > 0 ? s.precioCustom : c.precioSugerido;
           const precioCobrado = s.descuento > 0 ? precioBase * (1 - s.descuento / 100) : precioBase;
-          const comisionReal = precioCobrado * ((config.comisionPct || 0) / 100);
+          // La manicurista cobra su % del precio sin promo; el descuento lo absorbe el studio
+          const comisionReal = precioBase * ((config.comisionPct || 0) / 100);
           const gananciaReal = precioCobrado - c.costoMateriales - c.costoOperativo - comisionReal;
           const pierdeDinero = gananciaReal < 0;
           return `<div class="card">
@@ -863,26 +864,27 @@ function updateSvcPreview() {
 
   if (wrapper) wrapper.style.display = 'block';
 
-  const descuentoPct = parseFloat(document.getElementById('svc-descuento')?.value) || 0;
-  const precioBase   = (tempPrecioCustom > 0 ? tempPrecioCustom : c.precioSugerido) * (1 - descuentoPct / 100);
-  const precioEfect  = precioBase;
+  const descuentoPct   = parseFloat(document.getElementById('svc-descuento')?.value) || 0;
+  // precioSinPromo: el precio base que cobra el cliente (custom o sugerido), SIN descuento
+  const precioSinPromo = tempPrecioCustom > 0 ? tempPrecioCustom : c.precioSugerido;
+  const descuentoMonto = precioSinPromo * descuentoPct / 100;
+  const precioConPromo = precioSinPromo - descuentoMonto;
 
-  // Update placeholder so user sees what the auto price would be
   const priceInp = document.getElementById('svc-precio-custom');
   if (priceInp && !tempPrecioCustom) priceInp.placeholder = Math.round(c.precioSugerido).toString();
 
   const comisionPct  = config.comisionPct || 0;
-  const comEfect     = precioEfect * (comisionPct / 100);
-  const netaEfect    = precioEfect - c.costoMateriales - c.costoOperativo - comEfect;
-  const margenPct    = precioEfect > 0 ? Math.round((netaEfect / precioEfect) * 100) : 0;
-  const comPct       = precioEfect > 0 ? Math.round((comEfect / precioEfect) * 100) : 0;
-  const costoPct     = precioEfect > 0 ? Math.round(((c.costoMateriales + c.costoOperativo) / precioEfect) * 100) : 0;
+  // La manicurista cobra su % del precio SIN promo; el descuento lo paga el studio
+  const comEfect     = precioSinPromo * (comisionPct / 100);
+  const netaEfect    = precioConPromo - c.costoMateriales - c.costoOperativo - comEfect;
+  const margenPct    = precioSinPromo > 0 ? Math.round((netaEfect / precioSinPromo) * 100) : 0;
+  const costoPct     = precioSinPromo > 0 ? Math.round(((c.costoMateriales + c.costoOperativo) / precioSinPromo) * 100) : 0;
   const pierde       = netaEfect < 0;
 
-  // Max discount before losing money: precio*(1-d/100)*(1-com/100) = costoBase
-  const comFactor    = 1 - comisionPct / 100;
-  const maxDescPct   = comFactor > 0 && c.precioSugerido > 0
-    ? Math.max(0, Math.floor((1 - c.costoBase / (c.precioSugerido * comFactor)) * 1000) / 10)
+  // maxDesc: precioSinPromo*(1-d%) - costoBase - precioSinPromo*com% = 0
+  // => d% = 1 - costoBase/precioSinPromo - com%
+  const maxDescPct   = precioSinPromo > 0
+    ? Math.max(0, Math.floor((1 - c.costoBase / precioSinPromo - comisionPct / 100) * 1000) / 10)
     : 0;
 
   el.innerHTML = `<div class="cost-breakdown" style="margin-top:10px">
@@ -890,16 +892,17 @@ function updateSvcPreview() {
     <div class="cost-row"><span class="cost-label">Materiales</span><span>$${fmt(c.costoMateriales)}</span></div>
     <div class="cost-row"><span class="cost-label">Operativo (${config.serviciosMes}/mes)</span><span>$${fmt(c.costoOperativo)}</span></div>
     <div class="cost-row subtotal"><span class="cost-label">Costo base</span><span>$${fmt(c.costoBase)}</span></div>
-    <div class="cost-row"><span class="cost-label">Precio sugerido (sin promo)</span><span class="text-hint">$${fmt(c.precioSugerido)}</span></div>
-    ${descuentoPct > 0 ? `<div class="cost-row"><span class="cost-label text-warn">Precio con −${descuentoPct}%</span><span class="text-warn font-medium">$${fmt(precioBase)}</span></div>` : ''}
+    <div class="cost-row"><span class="cost-label">Precio sugerido (calculado)</span><span class="text-hint">$${fmt(c.precioSugerido)}</span></div>
 
-    <div class="cost-section-label" style="margin-top:10px">Distribución a $${fmt(precioEfect)}</div>
+    <div class="cost-section-label" style="margin-top:10px">Distribución a $${fmt(precioSinPromo)}</div>
     <div class="cost-row"><span class="cost-label">Costos (${costoPct}%)</span><span>$${fmt(c.costoMateriales + c.costoOperativo)}</span></div>
-    ${comisionPct > 0 ? `<div class="cost-row"><span class="cost-label text-danger">Comisión manicurista (${comPct}%)</span><span class="text-danger">$${fmt(comEfect)}</span></div>` : ''}
+    ${comisionPct > 0 ? `<div class="cost-row"><span class="cost-label text-danger">Comisión manicurista (${comisionPct}%)</span><span class="text-danger">$${fmt(comEfect)}</span></div>` : ''}
+    ${descuentoPct > 0 ? `<div class="cost-row"><span class="cost-label text-warn">Descuento promo (${descuentoPct}%)</span><span class="text-warn">− $${fmt(descuentoMonto)}</span></div>` : ''}
     <div class="cost-row total">
       <span class="cost-label ${pierde ? 'text-danger' : 'text-success'}">Ganancia studio (${margenPct}%)</span>
       <span class="cost-val ${pierde ? 'text-danger' : 'text-success'}">$${fmt(netaEfect)}</span>
     </div>
+    ${descuentoPct > 0 ? `<div class="cost-row"><span class="cost-label">Cliente paga</span><span class="font-medium">$${fmt(precioConPromo)}</span></div>` : ''}
 
     ${descuentoPct > 0 || pierde ? `
     <div style="margin-top:10px;padding:10px 12px;border-radius:var(--radius-sm);background:${pierde ? 'var(--danger-bg)' : 'var(--warn-bg)'};border-left:3px solid ${pierde ? 'var(--danger)' : 'var(--warn)'}">
@@ -908,7 +911,7 @@ function updateSvcPreview() {
            <div style="font-size:12px;color:var(--text2);margin-top:3px">El descuento supera el margen del studio.</div>
            <div style="font-size:12px;color:var(--text2)">Descuento máximo sin perder: <strong>${maxDescPct}%</strong></div>`
         : `<div style="font-weight:500;color:var(--warn);font-size:13px">Promo activa: −${descuentoPct}%</div>
-           <div style="font-size:12px;color:var(--text2);margin-top:3px">El studio absorbe el descuento (la manicurista cobra sobre el precio cobrado).</div>
+           <div style="font-size:12px;color:var(--text2);margin-top:3px">La manicurista cobra sobre el precio sin promo ($${fmt(precioSinPromo)}). El studio absorbe el descuento.</div>
            <div style="font-size:12px;color:var(--text2)">Podés descontar hasta <strong>${maxDescPct}%</strong> sin perder dinero.</div>`
       }
     </div>` : ''}
@@ -1244,22 +1247,24 @@ window.onPagoSvcChange = function (val) {
     const s = servicios.find(x => x.id === val);
     if (s) {
       const c = calcularServicio(s);
-      let precio = s.precioCustom > 0 ? s.precioCustom : c.precioSugerido;
+      const precioSinPromo = s.precioCustom > 0 ? s.precioCustom : c.precioSugerido;
       let descuentoMonto = 0;
+      let precioConPromo = precioSinPromo;
       if (s.descuento && s.descuento > 0) {
-        descuentoMonto = precio * (s.descuento / 100);
-        precio = precio - descuentoMonto;
+        descuentoMonto = precioSinPromo * (s.descuento / 100);
+        precioConPromo = precioSinPromo - descuentoMonto;
       }
-      pagoTotalFijo = Math.round(precio);
-      const comReal = pagoTotalFijo * ((config.comisionPct || 0) / 100);
-      const netReal = pagoTotalFijo - c.costoMateriales - c.costoOperativo - comReal;
+      pagoTotalFijo = Math.round(precioConPromo);
+      // La manicurista cobra su % del precio sin promo; el studio absorbe el descuento
+      const comReal = precioSinPromo * ((config.comisionPct || 0) / 100);
+      const netReal = precioConPromo - c.costoMateriales - c.costoOperativo - comReal;
       document.getElementById('pago-precio-area').innerHTML = `
         <div class="cost-breakdown mb-3">
           <div class="cost-section-label">Precio del servicio</div>
           <div class="cost-row"><span class="cost-label">Materiales</span><span>$${fmt(c.costoMateriales)}</span></div>
           <div class="cost-row"><span class="cost-label">Operativo</span><span>$${fmt(c.costoOperativo)}</span></div>
-          ${config.comisionPct > 0 ? `<div class="cost-row"><span class="cost-label text-danger">Comisión manicurista (${config.comisionPct}%)</span><span class="text-danger">$${fmt(comReal)}</span></div>` : ''}
-          ${s.descuento ? `<div class="cost-row"><span class="cost-label text-warn">Descuento (${s.descuento}%)</span><span class="text-warn">— $${fmt(descuentoMonto)}</span></div>` : ''}
+          ${config.comisionPct > 0 ? `<div class="cost-row"><span class="cost-label text-danger">Comisión manicurista (${config.comisionPct}% sin promo)</span><span class="text-danger">$${fmt(comReal)}</span></div>` : ''}
+          ${s.descuento ? `<div class="cost-row"><span class="cost-label text-warn">Descuento promo (${s.descuento}%)</span><span class="text-warn">— $${fmt(descuentoMonto)}</span></div>` : ''}
           ${config.comisionPct > 0 ? `<div class="cost-row"><span class="cost-label text-success">Ganancia studio</span><span class="text-success font-medium">$${fmt(netReal)}</span></div>` : ''}
           <div class="cost-row total"><span>A cobrar</span><span class="cost-val">$${fmt(pagoTotalFijo)}</span></div>
         </div>`;
