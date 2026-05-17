@@ -9,27 +9,21 @@ import {
   collection, doc, getDocs, setDoc, deleteDoc, onSnapshot, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
+// Estado compartido con los nuevos módulos
+import {
+  insumos, servicios, pagos, movimientos, gastosFijos, config,
+  clientes, turnos, disponibilidad
+} from './store.js';
+
+// Nuevos módulos
+import { renderCRM }      from './crm.js';
+import { renderAgenda }   from './agenda.js';
+import { renderManychat } from './manychat-integration.js';
+
 const NS = 'barbi';
 const col = (name) => collection(db, NS, 'data', name);
 const docRef = (name, id) => doc(db, NS, 'data', name, id);
 const configDocRef = () => doc(db, NS, 'data', 'config', 'main');
-
-let insumos  = [];
-let servicios = [];
-let pagos    = [];
-let movimientos = []; // Nuevo: compras, gastos, transferencias
-let gastosFijos = [];
-let config   = {
-  serviciosMes: 80,
-  margenGanancia: 40,
-  comisionPct: 0,
-  userName: 'Barbi',
-  userRole: 'Administradora',
-  saldoEfectivo: 0,
-  saldoCuenta: 0,
-  salarioObjetivoManicurista: 0,
-  categorias: ['Geles', 'Tips', 'Primers', 'Limas', 'Pinturas', 'Equipamiento', 'Otros']
-};
 
 let dbReady = false;
 
@@ -87,25 +81,34 @@ async function saveGastosFijos() {
 async function loadAll() {
   setDbStatus('connecting', 'Conectando con Firebase…');
   try {
-    const [insSnap, svcSnap, pagSnap, movSnap, cfgSnap] = await Promise.all([
+    const [insSnap, svcSnap, pagSnap, movSnap, cfgSnap, cliSnap, turSnap, disSnap] = await Promise.all([
       getDocs(col('insumos')),
       getDocs(col('servicios')),
       getDocs(col('pagos')),
       getDocs(col('movimientos')),
-      getDocs(collection(db, NS, 'data', 'config'))
+      getDocs(collection(db, NS, 'data', 'config')),
+      getDocs(col('clientes')),
+      getDocs(col('turnos')),
+      getDocs(col('disponibilidad'))
     ]);
 
-    insumos   = insSnap.docs.map(d => d.data());
-    servicios = svcSnap.docs.map(d => d.data());
-    pagos     = pagSnap.docs.map(d => d.data());
-    movimientos = movSnap.docs.map(d => d.data());
+    // Mutar en-place para que los módulos importados vean los datos actualizados
+    const load = (arr, snap) => { arr.length = 0; arr.push(...snap.docs.map(d => d.data())); };
+    load(insumos,       insSnap);
+    load(servicios,     svcSnap);
+    load(pagos,         pagSnap);
+    load(movimientos,   movSnap);
+    load(clientes,      cliSnap);
+    load(turnos,        turSnap);
+    load(disponibilidad, disSnap);
 
     const cfgDoc = cfgSnap.docs.find(d => d.id === 'main');
     if (cfgDoc) {
       const data = cfgDoc.data();
-      gastosFijos = data.gastosFijos || [];
-      config = { ...config, ...data };
-      delete config.gastosFijos;
+      const gf = data.gastosFijos || [];
+      gastosFijos.length = 0; gastosFijos.push(...gf);
+      const { gastosFijos: _gf, ...rest } = data;
+      Object.assign(config, rest);
     }
 
     dbReady = true;
@@ -173,21 +176,27 @@ let currentPage = 'dashboard';
 let cajaTab = 'pagos';
 
 const pageTitles = {
-  dashboard: 'Dashboard',
-  insumos: 'Insumos',
-  servicios: 'Servicios',
-  caja: 'Caja',
-  estadisticas: 'Estadísticas',
-  config: 'Configuración'
+  dashboard:   'Dashboard',
+  crm:         'CRM — Clientas',
+  agenda:      'Agenda',
+  insumos:     'Insumos',
+  servicios:   'Servicios',
+  caja:        'Caja',
+  estadisticas:'Estadísticas',
+  manychat:    'ManyChat',
+  config:      'Configuración'
 };
 
 const pageRenderers = {
-  dashboard: renderDashboard,
-  insumos: renderInsumos,
-  servicios: renderServicios,
-  caja: renderCaja,
-  estadisticas: renderEstadisticas,
-  config: renderConfigPage
+  dashboard:   renderDashboard,
+  crm:         renderCRM,
+  agenda:      renderAgenda,
+  insumos:     renderInsumos,
+  servicios:   renderServicios,
+  caja:        renderCaja,
+  estadisticas:renderEstadisticas,
+  manychat:    renderManychat,
+  config:      renderConfigPage
 };
 
 window.setCajaTab = function (tab) { cajaTab = tab; renderCaja(); };
@@ -1973,24 +1982,17 @@ window.importarJSON = async function (event) {
       const data = JSON.parse(e.target.result);
       const batch = writeBatch(db);
 
-      if (data.insumos) {
-        data.insumos.forEach(obj => batch.set(docRef('insumos', obj.id), obj));
-        insumos = data.insumos;
-      }
-      if (data.servicios) {
-        data.servicios.forEach(obj => batch.set(docRef('servicios', obj.id), obj));
-        servicios = data.servicios;
-      }
-      if (data.pagos) {
-        data.pagos.forEach(obj => batch.set(docRef('pagos', obj.id), obj));
-        pagos = data.pagos;
-      }
-      if (data.movimientos) {
-        data.movimientos.forEach(obj => batch.set(docRef('movimientos', obj.id), obj));
-        movimientos = data.movimientos;
-      }
-      if (data.gastosFijos) gastosFijos = data.gastosFijos;
-      if (data.config) config = { ...config, ...data.config };
+      const loadArr = (arr, data, colName) => {
+        if (!data) return;
+        arr.length = 0; arr.push(...data);
+        data.forEach(obj => batch.set(docRef(colName, obj.id), obj));
+      };
+      loadArr(insumos,     data.insumos,     'insumos');
+      loadArr(servicios,   data.servicios,   'servicios');
+      loadArr(pagos,       data.pagos,       'pagos');
+      loadArr(movimientos, data.movimientos, 'movimientos');
+      if (data.gastosFijos) { gastosFijos.length = 0; gastosFijos.push(...data.gastosFijos); }
+      if (data.config) Object.assign(config, data.config);
 
       await batch.commit();
       await saveGastosFijos();
@@ -2012,6 +2014,37 @@ window.navigate = navigate;
 window.toggleSidebar = toggleSidebar;
 window.closeModal = closeModal;
 window.renderIngList = renderIngList;
+
+// Utilidades que los módulos nuevos llaman via window
+window._saveDoc = saveDoc;
+window._saveConfig = saveConfig;
+
+// Bridge: cuando agenda completa un turno, crea el pago en Caja
+window._crearPagoDesdeAgenda = async function (turno) {
+  const svc = servicios.find(s => s.id === turno.servicioId);
+  const c = svc ? calcularServicio(svc) : { costoMateriales: 0, costoOperativo: 0 };
+  const precio = turno.precioEstimado || 0;
+  const comision = precio * ((config.comisionPct || 0) / 100);
+  const ganancia = precio - c.costoMateriales - c.costoOperativo - comision;
+
+  const pago = {
+    id: uid(),
+    fecha: new Date().toISOString(),
+    servicioId:     turno.servicioId || '',
+    servicioNombre: turno.servicio   || '',
+    clienteId:      turno.clienteId  || '',
+    clienteNombre:  turno.clienteNombre || '',
+    total:          precio,
+    comisionMonto:  Math.round(comision),
+    gananciaNeta:   Math.round(ganancia),
+    metodoPago:     'efectivo',
+    turnoId:        turno.id,
+    nota:           'Creado automáticamente al completar turno'
+  };
+  await saveDoc('pagos', pago);
+  pagos.push(pago);
+  toast('Pago registrado en Caja automáticamente');
+};
 
 // ── INIT ──────────────────────────────────────────────────
 loadAll();
